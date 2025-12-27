@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Retail App{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 60vh;
+        flex-wrap: wrap;
+        gap: 30px;
+        padding: 40px 20px;
+    }
+    
+    .dashboard-card {
+        background: white;
+        border-radius: 12px;
+        padding: 40px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        min-width: 250px;
+        max-width: 300px;
+        transition: transform 0.3s, box-shadow 0.3s;
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+    
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        text-decoration: none;
+        color: inherit;
+    }
+    
+    .dashboard-card-icon {
+        font-size: 48px;
+        margin-bottom: 20px;
+    }
+    
+    .dashboard-card h3 {
+        margin: 0 0 10px 0;
+        color: #2c3e50;
+        font-size: 24px;
+    }
+    
+    .dashboard-card p {
+        color: #666;
+        margin: 0;
+        font-size: 14px;
+    }
+    
+    .card-add {
+        border-top: 4px solid #3498db;
+    }
+    
+    .card-debtors {
+        border-top: 4px solid #e74c3c;
+    }
+    
+    .card-settings {
+        border-top: 4px solid #9b59b6;
+    }
+    
+    .card-about {
+        border-top: 4px solid #27ae60;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Add Customer Card -->
+    <a href="{{ url_for('add_customer') }}" class="dashboard-card card-add">
+        <div class="dashboard-card-icon">➕</div>
+        <h3>Add Customer</h3>
+        <p>Add new customer to the system</p>
+    </a>
+    
+    <!-- Debtor Details Card -->
+    <a href="{{ url_for('debtor_details') }}" class="dashboard-card card-debtors">
+        <div class="dashboard-card-icon">📋</div>
+        <h3>Debtor Details</h3>
+        <p>View overdue customers and balances</p>
+    </a>
+    
+    <!-- Settings Card -->
+    <a href="{{ url_for('settings') }}" class="dashboard-card card-settings">
+        <div class="dashboard-card-icon">⚙️</div>
+        <h3>Settings</h3>
+        <p>Configure app settings and defaults</p>
+    </a>
+    
+    <!-- About App Card -->
+    <a href="{{ url_for('about') }}" class="dashboard-card card-about">
+        <div class="dashboard-card-icon">ℹ️</div>
+        <h3>About App</h3>
+        <p>Learn about this application</p>
+    </a>
+</div>
+{% endblock %}
+

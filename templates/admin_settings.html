@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings - Admin{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>System Settings</h2>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn">Back to Dashboard</a>
+    </div>
+    
+    <p style="color: #666; margin-bottom: 30px;">
+        Configure global system settings that apply to all retailers
+    </p>
+    
+    <form method="POST" action="{{ url_for('admin_settings') }}">
+        <!-- Global Dunning Days -->
+        <div class="form-group">
+            <label for="global_dunning_days">Global Default Dunning Days</label>
+            <input type="number" 
+                   id="global_dunning_days" 
+                   name="global_dunning_days" 
+                   value="{{ settings.get('global_dunning_days', {}).get('value', '15') }}"
+                   min="5" 
+                   max="30" 
+                   required>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('global_dunning_days', {}).get('description', 'Default dunning days for all retailers') }}
+            </small>
+        </div>
+        
+        <!-- Disclaimer Text -->
+        <div class="form-group">
+            <label for="disclaimer_text">Default Disclaimer Text</label>
+            <textarea id="disclaimer_text" 
+                      name="disclaimer_text" 
+                      rows="3"
+                      required>{{ settings.get('disclaimer_text', {}).get('value', '') }}</textarea>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('disclaimer_text', {}).get('description', 'Default disclaimer text for messages') }}
+            </small>
+        </div>
+        
+        <!-- WhatsApp Enabled -->
+        <div class="form-group">
+            <label for="whatsapp_enabled">WhatsApp Messaging</label>
+            <select id="whatsapp_enabled" name="whatsapp_enabled" style="padding: 10px; width: 100%;">
+                <option value="true" {% if settings.get('whatsapp_enabled', {}).get('value', 'true') == 'true' %}selected{% endif %}>Enabled</option>
+                <option value="false" {% if settings.get('whatsapp_enabled', {}).get('value', 'true') == 'false' %}selected{% endif %}>Disabled</option>
+            </select>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('whatsapp_enabled', {}).get('description', 'Enable/disable WhatsApp messaging globally') }}
+            </small>
+        </div>
+        
+        <!-- Maintenance Mode -->
+        <div class="form-group">
+            <label for="maintenance_mode">Maintenance Mode</label>
+            <select id="maintenance_mode" name="maintenance_mode" style="padding: 10px; width: 100%;">
+                <option value="false" {% if settings.get('app_maintenance_mode', {}).get('value', 'false') == 'false' %}selected{% endif %}>Disabled</option>
+                <option value="true" {% if settings.get('app_maintenance_mode', {}).get('value', 'false') == 'true' %}selected{% endif %}>Enabled</option>
+            </select>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('app_maintenance_mode', {}).get('description', 'Put entire app in maintenance mode') }}
+            </small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Save Settings</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

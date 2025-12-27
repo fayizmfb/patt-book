@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Store Setup - Retail App{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 50px auto;">
+    <h2>Welcome! Set Up Your Store</h2>
+    <p style="color: #666; margin-bottom: 30px;">
+        Please provide your store details to get started.
+        <br><small>Logged in as: {{ phone_number }}</small>
+    </p>
+    
+    <form method="POST" action="{{ url_for('onboarding') }}">
+        <!-- Store Name -->
+        <div class="form-group">
+            <label for="store_name">Store Name *</label>
+            <input type="text" 
+                   id="store_name" 
+                   name="store_name" 
+                   placeholder="Enter your store name" 
+                   required>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                This name will be used in WhatsApp messages and reports
+            </small>
+        </div>
+        
+        <!-- Store Address -->
+        <div class="form-group">
+            <label for="store_address">Store Address *</label>
+            <textarea id="store_address" 
+                      name="store_address" 
+                      rows="3"
+                      placeholder="Enter your store address" 
+                      required></textarea>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Full address of your store location
+            </small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Save & Continue</button>
+            <a href="{{ url_for('logout') }}" class="btn">Logout</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

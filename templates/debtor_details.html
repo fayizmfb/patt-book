@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Debtor Details - Retail App{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Checkbox styling for better appearance */
+    .debtor-checkbox {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        accent-color: #3498db;
+    }
+    
+    /* Balance and days overdue display - stacked vertically */
+    .balance-days-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 5px;
+    }
+    
+    .outstanding-balance {
+        font-weight: bold;
+        color: #e74c3c;
+        font-size: 16px;
+    }
+    
+    .days-overdue-text {
+        font-size: 13px;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+        <h2>Debtor Details</h2>
+        
+        <!-- Sort Options -->
+        <div>
+            <label for="sort_select" style="margin-right: 10px; font-weight: 600;">Sort by:</label>
+            <select id="sort_select" onchange="window.location.href='{{ url_for('debtor_details') }}?sort=' + this.value" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
+                <option value="new_to_old" {% if sort_option == 'new_to_old' %}selected{% endif %}>New to Old</option>
+                <option value="old_to_new" {% if sort_option == 'old_to_new' %}selected{% endif %}>Old to New</option>
+                <option value="large_to_small" {% if sort_option == 'large_to_small' %}selected{% endif %}>Large Amount to Small</option>
+                <option value="small_to_large" {% if sort_option == 'small_to_large' %}selected{% endif %}>Small Amount to Large</option>
+            </select>
+        </div>
+    </div>
+    
+    <p style="color: #666; margin-bottom: 20px;">
+        Showing overdue customers with outstanding balances (as of {{ today }})
+        <br><small>Select customers using checkboxes for future actions</small>
+    </p>
+    
+    {% if debtor_list %}
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40px;">
+                    <!-- Checkbox column header (optional) -->
+                </th>
+                <th>Customer Name</th>
+                <th class="text-right">Outstanding Balance & Days</th>
+                <th>Due Date</th>
+                <th>Ageing Bucket</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for debtor in debtor_list %}
+            <tr>
+                <!-- Checkbox column: Optional selection for future actions -->
+                <!-- Selection state does not affect the display of balance/days information -->
+                <td style="text-align: center;">
+                    <input type="checkbox" 
+                           class="debtor-checkbox" 
+                           name="selected_debtor" 
+                           value="{{ debtor['customer_name'] }}"
+                           aria-label="Select {{ debtor['customer_name'] }}">
+                </td>
+                
+                <!-- Customer name column -->
+                <td><strong>{{ debtor['customer_name'] }}</strong></td>
+                
+                <!-- Balance and Days Overdue column: Always shows both regardless of checkbox state -->
+                <!-- Outstanding balance displayed on top, days overdue shown below -->
+                <td class="text-right">
+                    <div class="balance-days-container">
+                        <div class="outstanding-balance">
+                            {{ "%.2f"|format(debtor['outstanding_balance']) }}
+                        </div>
+                        <div class="days-overdue-text">
+                            {{ debtor['days_overdue'] }} days overdue
+                        </div>
+                    </div>
+                </td>
+                
+                <!-- Due date column -->
+                <td>{{ debtor['due_date'] }}</td>
+                
+                <!-- Ageing bucket column -->
+                <td>
+                    <span class="badge badge-danger">{{ debtor['bucket'] }}</span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        No overdue debts found. All accounts are up to date!
+    </p>
+    {% endif %}
+    
+    <div class="actions" style="margin-top: 20px;">
+        <a href="{{ url_for('dashboard') }}" class="btn">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}
+

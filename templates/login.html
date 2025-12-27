@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Retail App{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 50px auto;">
+    <h2>Login with Phone Number</h2>
+    <p style="color: #666; margin-bottom: 30px;">
+        Enter your phone number to receive an OTP code
+    </p>
+    
+    <form method="POST" action="{{ url_for('login') }}">
+        <!-- Phone Number Input -->
+        <div class="form-group">
+            <label for="phone_number">Phone Number *</label>
+            <input type="tel" 
+                   id="phone_number" 
+                   name="phone_number" 
+                   value="{{ phone_number or '' }}"
+                   placeholder="+1234567890" 
+                   required
+                   {% if show_otp_input %}readonly{% endif %}>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Include country code (e.g., +1 for US, +91 for India)
+            </small>
+        </div>
+        
+        <!-- OTP Input (shown after phone number is submitted) -->
+        {% if show_otp_input %}
+        <div class="form-group">
+            <label for="verification_code">Verification Code *</label>
+            <input type="text" 
+                   id="verification_code" 
+                   name="verification_code" 
+                   placeholder="Enter 6-digit code" 
+                   required
+                   maxlength="6"
+                   pattern="[0-9]{6}">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Enter the 6-digit code sent to your phone
+            </small>
+        </div>
+        {% endif %}
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">
+                {% if show_otp_input %}Verify Code{% else %}Send OTP{% endif %}
+            </button>
+        </div>
+    </form>
+    
+    <p style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
+        Demo Mode: Enter any 6-digit code to continue
+    </p>
+</div>
+{% endblock %}
+

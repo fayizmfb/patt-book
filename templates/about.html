@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}About - Retail App{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>About {{ app_name }}</h2>
+    
+    <div style="margin-top: 30px;">
+        <h3 style="color: #2c3e50; margin-bottom: 15px;">Application Description</h3>
+        <p style="font-size: 16px; line-height: 1.8; color: #555;">
+            {{ app_description }}
+        </p>
+    </div>
+    
+    <div style="margin-top: 40px;">
+        <h3 style="color: #2c3e50; margin-bottom: 15px;">Features</h3>
+        <ul style="font-size: 16px; line-height: 2; color: #555; padding-left: 25px;">
+            <li><strong>Customer Management:</strong> Add and manage customer information</li>
+            <li><strong>Credit Tracking:</strong> Record credit entries with automatic due date calculation</li>
+            <li><strong>Payment Processing:</strong> Record payments with balance validation</li>
+            <li><strong>Debtor Management:</strong> Track overdue accounts with detailed reports</li>
+            <li><strong>Ageing Analysis:</strong> Categorize debts by age buckets for better collection management</li>
+            <li><strong>Customer Ledger:</strong> Complete transaction history for each customer</li>
+        </ul>
+    </div>
+    
+    <div style="margin-top: 40px;">
+        <h3 style="color: #2c3e50; margin-bottom: 15px;">Technical Details</h3>
+        <ul style="font-size: 16px; line-height: 2; color: #555; padding-left: 25px;">
+            <li><strong>Framework:</strong> Python Flask</li>
+            <li><strong>Database:</strong> SQLite</li>
+            <li><strong>Frontend:</strong> HTML, CSS (No external frameworks)</li>
+            <li><strong>Design:</strong> Simple, clean, beginner-friendly interface</li>
+        </ul>
+    </div>
+    
+    <div style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-radius: 8px;">
+        <h3 style="color: #2c3e50; margin-bottom: 15px;">Version Information</h3>
+        <p style="color: #666; margin: 0;">
+            <strong>Version:</strong> 1.0.0<br>
+            <strong>Last Updated:</strong> 2024
+        </p>
+    </div>
+    
+    <div class="actions" style="margin-top: 30px;">
+        <a href="{{ url_for('dashboard') }}" class="btn">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}
+

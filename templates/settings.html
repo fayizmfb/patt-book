@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Retail App{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Settings</h2>
+    <p style="color: #666; margin-bottom: 30px;">
+        Configure application settings and defaults
+    </p>
+    
+    <form method="POST" action="{{ url_for('settings') }}">
+        <!-- Default Dunning Days -->
+        <div class="form-group">
+            <label for="default_dunning_days">Default Dunning Days (from entry date)</label>
+            <input type="number" 
+                   id="default_dunning_days" 
+                   name="default_dunning_days" 
+                   value="{{ settings.get('default_dunning_days', {}).get('value', '15') }}"
+                   min="5" 
+                   max="30" 
+                   required>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('default_dunning_days', {}).get('description', 'Default number of days from entry date until payment is due') }}
+            </small>
+        </div>
+        
+        <!-- App Name -->
+        <div class="form-group">
+            <label for="app_name">App Name</label>
+            <input type="text" 
+                   id="app_name" 
+                   name="app_name" 
+                   value="{{ settings.get('app_name', {}).get('value', 'Retail App') }}"
+                   required>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('app_name', {}).get('description', 'Application name') }}
+            </small>
+        </div>
+        
+        <!-- App Description -->
+        <div class="form-group">
+            <label for="app_description">App Description</label>
+            <textarea id="app_description" 
+                      name="app_description" 
+                      rows="3">{{ settings.get('app_description', {}).get('value', '') }}</textarea>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('app_description', {}).get('description', 'Application description') }}
+            </small>
+        </div>
+        
+        <!-- Admin Email -->
+        <div class="form-group">
+            <label for="admin_email">Admin Email</label>
+            <input type="email" 
+                   id="admin_email" 
+                   name="admin_email" 
+                   value="{{ settings.get('admin_email', {}).get('value', '') }}"
+                   placeholder="admin@example.com">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('admin_email', {}).get('description', 'Admin email address') }}
+            </small>
+        </div>
+        
+        <!-- Admin Phone -->
+        <div class="form-group">
+            <label for="admin_phone">Admin Phone</label>
+            <input type="tel" 
+                   id="admin_phone" 
+                   name="admin_phone" 
+                   value="{{ settings.get('admin_phone', {}).get('value', '') }}"
+                   placeholder="+1234567890">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('admin_phone', {}).get('description', 'Admin phone number') }}
+            </small>
+        </div>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+        
+        <h3 style="color: #2c3e50; margin-bottom: 20px;">Store Information</h3>
+        
+        <!-- Store Name -->
+        <div class="form-group">
+            <label for="store_name">Store Name *</label>
+            <input type="text" 
+                   id="store_name" 
+                   name="store_name" 
+                   value="{{ settings.get('store_name', {}).get('value', 'Your Store') }}"
+                   required>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                {{ settings.get('store_name', {}).get('description', 'Store name (used in WhatsApp messages)') }}
+            </small>
+        </div>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+        
+        <h3 style="color: #2c3e50; margin-bottom: 20px;">WhatsApp Configuration</h3>
+        <p style="color: #666; margin-bottom: 20px; font-size: 14px;">
+            Configure your WhatsApp Business API credentials to enable automatic reminders.
+            Leave blank to disable WhatsApp messaging (useful for testing).
+        </p>
+        
+        <!-- WhatsApp API URL -->
+        <div class="form-group">
+            <label for="whatsapp_api_url">WhatsApp API URL</label>
+            <input type="text" 
+                   id="whatsapp_api_url" 
+                   name="whatsapp_api_url" 
+                   value="{{ settings.get('whatsapp_api_url', {}).get('value', '') }}"
+                   placeholder="https://graph.facebook.com">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                WhatsApp Business API base URL (e.g., https://graph.facebook.com)
+            </small>
+        </div>
+        
+        <!-- WhatsApp API Token -->
+        <div class="form-group">
+            <label for="whatsapp_api_token">WhatsApp API Token</label>
+            <input type="password" 
+                   id="whatsapp_api_token" 
+                   name="whatsapp_api_token" 
+                   value="{{ settings.get('whatsapp_api_token', {}).get('value', '') }}"
+                   placeholder="Your API access token">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                WhatsApp Business API access token (keep this secure)
+            </small>
+        </div>
+        
+        <!-- WhatsApp Phone ID -->
+        <div class="form-group">
+            <label for="whatsapp_phone_id">WhatsApp Phone Number ID</label>
+            <input type="text" 
+                   id="whatsapp_phone_id" 
+                   name="whatsapp_phone_id" 
+                   value="{{ settings.get('whatsapp_phone_id', {}).get('value', '') }}"
+                   placeholder="123456789012345">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                WhatsApp Business Phone Number ID from Meta Business account
+            </small>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Save Settings</button>
+            <a href="{{ url_for('dashboard') }}" class="btn">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Patt Book{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 40px;
+    }
+    
+    .stat-card {
+        background: white;
+        padding: 25px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    
+    .stat-card h3 {
+        margin: 0 0 10px 0;
+        color: #666;
+        font-size: 14px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .stat-card .stat-value {
+        font-size: 32px;
+        font-weight: bold;
+        color: #2c3e50;
+        margin: 0;
+    }
+    
+    .stat-card.primary { border-top: 4px solid #3498db; }
+    .stat-card.success { border-top: 4px solid #27ae60; }
+    .stat-card.warning { border-top: 4px solid #f39c12; }
+    .stat-card.danger { border-top: 4px solid #e74c3c; }
+    
+    .admin-nav {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        margin-bottom: 30px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 30px;">
+    <h1>Master Admin Dashboard</h1>
+    <p style="color: #666;">Overall system metrics and management</p>
+</div>
+
+<!-- Overall Metrics -->
+<div class="stats-grid">
+    <div class="stat-card primary">
+        <h3>Total Retailers</h3>
+        <p class="stat-value">{{ stats.total_retailers }}</p>
+    </div>
+    
+    <div class="stat-card success">
+        <h3>Active Retailers</h3>
+        <p class="stat-value">{{ stats.active_retailers }}</p>
+    </div>
+    
+    <div class="stat-card warning">
+        <h3>Inactive Retailers</h3>
+        <p class="stat-value">{{ stats.inactive_retailers }}</p>
+    </div>
+    
+    <div class="stat-card primary">
+        <h3>Total Customers</h3>
+        <p class="stat-value">{{ stats.total_customers }}</p>
+    </div>
+    
+    <div class="stat-card danger">
+        <h3>Total Outstanding</h3>
+        <p class="stat-value">{{ "%.2f"|format(stats.total_outstanding) }}</p>
+    </div>
+</div>
+
+<!-- Admin Navigation -->
+<div class="card">
+    <h2>Admin Functions</h2>
+    <div class="admin-nav">
+        <a href="{{ url_for('admin_retailers') }}" class="btn">Manage Retailers</a>
+        <a href="{{ url_for('admin_announcements') }}" class="btn">Announcements</a>
+        <a href="{{ url_for('admin_settings') }}" class="btn">System Settings</a>
+        <a href="{{ url_for('admin_audit_log') }}" class="btn">Audit Log</a>
+        <a href="{{ url_for('admin_logout') }}" class="btn btn-danger">Logout</a>
+    </div>
+</div>
+{% endblock %}
+

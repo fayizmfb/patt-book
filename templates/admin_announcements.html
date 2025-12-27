@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Announcements - Admin{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>Announcements</h2>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn">Back to Dashboard</a>
+    </div>
+    
+    <h3 style="margin-bottom: 20px;">Create New Announcement</h3>
+    <form method="POST" action="{{ url_for('admin_announcements') }}" style="margin-bottom: 40px;">
+        <div class="form-group">
+            <label for="title">Title *</label>
+            <input type="text" 
+                   id="title" 
+                   name="title" 
+                   placeholder="Announcement title" 
+                   required>
+        </div>
+        
+        <div class="form-group">
+            <label for="message">Message *</label>
+            <textarea id="message" 
+                      name="message" 
+                      rows="5"
+                      placeholder="Enter announcement message for retailers" 
+                      required></textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Create Announcement</button>
+        </div>
+    </form>
+    
+    <hr style="margin: 30px 0;">
+    
+    <h3 style="margin-bottom: 20px;">Recent Announcements</h3>
+    {% if announcements %}
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Message</th>
+                <th>Created By</th>
+                <th>Created At</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for announcement in announcements %}
+            <tr>
+                <td><strong>{{ announcement['title'] }}</strong></td>
+                <td>{{ announcement['message'][:100] }}{% if announcement['message']|length > 100 %}...{% endif %}</td>
+                <td>{{ announcement['created_by'] }}</td>
+                <td>{{ announcement['created_at'] }}</td>
+                <td>
+                    {% if announcement['status'] == 'active' %}
+                        <span class="badge badge-success">Active</span>
+                    {% else %}
+                        <span class="badge">Inactive</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        No announcements yet.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+

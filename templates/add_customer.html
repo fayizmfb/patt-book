@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Add Customer - Retail App{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Add New Customer</h2>
+    
+    <form method="POST" action="{{ url_for('add_customer') }}">
+        <div class="form-group">
+            <label for="name">Customer Name *</label>
+            <input type="text" id="name" name="name" required placeholder="Enter customer name">
+        </div>
+        
+        <div class="form-group">
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" name="phone" placeholder="Enter phone number">
+        </div>
+        
+        <div class="form-group">
+            <label for="address">Address</label>
+            <textarea id="address" name="address" placeholder="Enter customer address"></textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn-success">Add Customer</button>
+            <a href="{{ url_for('dashboard') }}" class="btn">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

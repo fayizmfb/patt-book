@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Ageing Report - Retail App{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Ageing Report</h2>
+    <p style="color: #666; margin-bottom: 20px;">
+        Overdue credits grouped by custom age buckets (as of {{ today }})
+        <br><small>Shows only credits where balance > 0 and due_date < today</small>
+    </p>
+    
+    {% if report_data %}
+    <table>
+        <thead>
+            <tr>
+                <th>Customer Name</th>
+                <th class="text-right">Balance</th>
+                <th class="text-right">Days Overdue</th>
+                <th>Bucket Label</th>
+                <th>Due Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data %}
+            <tr>
+                <td><strong>{{ item['customer_name'] }}</strong></td>
+                <td class="text-right">{{ "%.2f"|format(item['balance']) }}</td>
+                <td class="text-right">
+                    <span class="badge badge-warning">{{ item['days_overdue'] }} days</span>
+                </td>
+                <td><strong>{{ item['bucket'] }}</strong></td>
+                <td>{{ item['due_date'] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        No overdue credits found with outstanding balance.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+

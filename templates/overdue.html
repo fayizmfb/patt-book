@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Overdue Entries - Retail App{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Overdue Entries</h2>
+    <p style="color: #666; margin-bottom: 20px;">
+        Showing all credits where balance > 0 and due date < today ({{ today }})
+    </p>
+    
+    {% if overdue_items %}
+    <table>
+        <thead>
+            <tr>
+                <th>Credit ID</th>
+                <th>Customer</th>
+                <th>Credit Amount</th>
+                <th>Entry Date</th>
+                <th>Due Date</th>
+                <th>Total Payments</th>
+                <th>Outstanding Balance</th>
+                <th>Days Overdue</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in overdue_items %}
+            <tr>
+                <td>{{ item['credit_id'] }}</td>
+                <td><strong>{{ item['customer_name'] }}</strong></td>
+                <td class="text-right">{{ "%.2f"|format(item['amount']) }}</td>
+                <td>{{ item['entry_date'] }}</td>
+                <td>
+                    <span class="badge badge-danger">{{ item['due_date'] }}</span>
+                </td>
+                <td class="text-right">{{ "%.2f"|format(item['total_payments']) }}</td>
+                <td class="text-right"><strong>{{ "%.2f"|format(item['outstanding_balance']) }}</strong></td>
+                <td>
+                    <span class="badge badge-warning">{{ item['days_overdue'] }} days</span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        No overdue entries found. Great job!
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
+
