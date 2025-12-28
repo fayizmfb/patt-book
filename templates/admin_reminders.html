@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Reminders - Admin{% endblock %}
+
+{% block extra_css %}
+<style>
+    .reminder-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid #f39c12;
+    }
+    
+    .reminder-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 15px;
+    }
+    
+    .customer-info h3 {
+        margin: 0 0 5px 0;
+        color: #2c3e50;
+    }
+    
+    .customer-details {
+        color: #666;
+        font-size: 14px;
+    }
+    
+    .reminder-details {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+    
+    .reminder-details table {
+        width: 100%;
+        margin: 0;
+    }
+    
+    .reminder-details td {
+        padding: 5px 0;
+        border: none;
+    }
+    
+    .reminder-details td:first-child {
+        font-weight: 600;
+        width: 140px;
+        color: #666;
+    }
+    
+    .whatsapp-preview {
+        background: #e8f5e8;
+        border: 1px solid #c3e6c3;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 15px;
+        font-family: monospace;
+        white-space: pre-wrap;
+        font-size: 13px;
+        color: #2c3e50;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .btn-whatsapp {
+        background-color: #25d366;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        transition: background-color 0.3s;
+    }
+    
+    .btn-whatsapp:hover {
+        background-color: #128c7e;
+        color: white;
+        text-decoration: none;
+    }
+    
+    .overdue-indicator {
+        background-color: #ffeaa7;
+        color: #d63031;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 30px;">
+    <h1>📱 Payment Reminders</h1>
+    <p style="color: #666;">Pending payment reminders that need to be sent manually</p>
+</div>
+
+{% if reminders %}
+<div class="card">
+    <h2>Pending Reminders ({{ reminders|length }})</h2>
+    <p style="color: #666; margin-bottom: 20px;">
+        These customers have payment reminders scheduled for today or earlier.
+        Click "Send WhatsApp" to open WhatsApp with the pre-filled message.
+    </p>
+    
+    {% for reminder in reminders %}
+    <div class="reminder-card">
+        <div class="reminder-header">
+            <div class="customer-info">
+                <h3>{{ reminder['customer_name'] }}
+                    {% if reminder['due_date'] < today %}
+                        <span class="overdue-indicator">OVERDUE</span>
+                    {% endif %}
+                </h3>
+                <div class="customer-details">
+                    Phone: {{ reminder['phone'] or 'Not provided' }}
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 18px; font-weight: bold; color: #e74c3c;">
+                    ${{ "%.2f"|format(reminder['outstanding_balance']) }}
+                </div>
+                <div style="color: #666; font-size: 12px;">Outstanding Balance</div>
+            </div>
+        </div>
+        
+        <div class="reminder-details">
+            <table>
+                <tr>
+                    <td>Due Date:</td>
+                    <td>{{ reminder['due_date'] }}</td>
+                </tr>
+                <tr>
+                    <td>Reminder Date:</td>
+                    <td>{{ reminder['reminder_date'] }}</td>
+                </tr>
+                <tr>
+                    <td>Days Until Due:</td>
+                    <td>
+                        {% set days_until = ((reminder['due_date'] - today).days) %}
+                        {% if days_until < 0 %}
+                            <span style="color: #e74c3c; font-weight: bold;">{{ days_until * -1 }} days overdue</span>
+                        {% elif days_until == 0 %}
+                            <span style="color: #f39c12; font-weight: bold;">Due today</span>
+                        {% else %}
+                            <span style="color: #27ae60;">{{ days_until }} days</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </div>
+        
+        <div class="whatsapp-preview">
+            <strong>WhatsApp Message Preview:</strong><br><br>
+            {{ reminder['whatsapp_message'] }}
+        </div>
+        
+        <div class="action-buttons">
+            {% if reminder['phone'] %}
+                <a href="https://wa.me/{{ reminder['phone'] }}?text={{ reminder['whatsapp_message']|urlencode }}" 
+                   target="_blank" 
+                   class="btn-whatsapp">
+                    📱 Send WhatsApp
+                </a>
+            {% else %}
+                <span style="color: #e74c3c; font-style: italic;">No phone number available</span>
+            {% endif %}
+            
+            <a href="{{ url_for('view_customer', customer_id=reminder['customer_id']) }}" 
+               class="btn btn-primary" 
+               target="_blank">
+                👁️ View Customer
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <h2>No Pending Reminders</h2>
+    <p style="color: #666; text-align: center; padding: 40px;">
+        🎉 All payment reminders have been sent or there are no upcoming reminders scheduled.
+    </p>
+</div>
+{% endif %}
+
+<div class="actions" style="margin-top: 30px;">
+    <a href="{{ url_for('admin_dashboard') }}" class="btn">← Back to Admin Dashboard</a>
+</div>
+{% endblock %}
