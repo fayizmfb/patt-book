@@ -277,6 +277,13 @@ def add_customer():
                 )
                 db.commit()
                 
+                # Create transaction record for the debit
+                db.execute(
+                    'INSERT INTO transactions (customer_id, type, amount, description) VALUES (?, ?, ?, ?)',
+                    (customer_id, 'DEBIT', amount, f'Initial credit entry - Due in {due_days_int} days')
+                )
+                db.commit()
+                
                 print(f"DEBUG: Credit entry added for customer {customer_id}: amount={amount}, due_date={due_date}")
                 
                 # Send immediate credit confirmation message for initial debit
@@ -342,80 +349,23 @@ def view_customer(customer_id):
         flash('Customer not found!', 'error')
         return redirect(url_for('index'))
 
-    # Get all transactions (credits and payments) for this customer
-    # Combine credits and payments into a single ledger
-    credits = db.execute("""
+    # Get all transactions from the unified transactions table
+    transactions = db.execute("""
         SELECT
-            'credit' as type,
             id,
+            type,
             amount,
-            entry_date as transaction_date,
-            due_date,
-            due_days,
+            description,
             created_at
-        FROM credits
+        FROM transactions
         WHERE customer_id = ?
+        ORDER BY created_at DESC
     """, (customer_id,)).fetchall()
-
-    payments = db.execute("""
-        SELECT
-            'payment' as type,
-            id,
-            amount,
-            payment_date as transaction_date,
-            NULL as due_date,
-            NULL as due_days,
-            created_at
-        FROM payments
-        WHERE customer_id = ?
-    """, (customer_id,)).fetchall()
-
-    # Combine and sort transactions by date (newest first)
-    transactions = []
-    for credit in credits:
-        transactions.append({
-            'id': credit['id'],
-            'type': 'debit',  # Show as debit for user understanding
-            'amount': credit['amount'],
-            'date': credit['transaction_date'],
-            'due_date': credit['due_date'],
-            'due_days': credit['due_days'],
-            'created_at': credit['created_at']
-        })
-
-    for payment in payments:
-        transactions.append({
-            'id': payment['id'],
-            'type': 'payment',
-            'amount': payment['amount'],
-            'date': payment['transaction_date'],
-            'due_date': None,
-            'due_days': None,
-            'created_at': payment['created_at']
-        })
-
-    # Sort by date descending (newest first)
-    transactions.sort(key=lambda x: x['created_at'], reverse=True)
-
-    # Calculate running balance for each transaction
-    # Start from the beginning and work forward chronologically
-    chronological_transactions = sorted(transactions, key=lambda x: x['created_at'])
-
-    running_balance = 0.0
-    for transaction in chronological_transactions:
-        if transaction['type'] == 'debit':
-            running_balance += transaction['amount']
-        elif transaction['type'] == 'payment':
-            running_balance -= transaction['amount']
-        transaction['balance_after'] = max(0, running_balance)  # Ensure no negative
-
-    # Sort back to newest first for display
-    transactions.sort(key=lambda x: x['created_at'], reverse=True)
 
     # Calculate current outstanding balance
-    total_credits = sum(t['amount'] for t in transactions if t['type'] == 'debit')
-    total_payments = sum(t['amount'] for t in transactions if t['type'] == 'payment')
-    outstanding_balance = max(0, total_credits - total_payments)
+    total_debits = sum(t['amount'] for t in transactions if t['type'] == 'DEBIT')
+    total_payments = sum(t['amount'] for t in transactions if t['type'] == 'PAYMENT')
+    outstanding_balance = max(0, total_debits - total_payments)
 
     db.close()
     return render_template('view_customer.html',
@@ -465,6 +415,13 @@ def add_credit(customer_id=None):
             )
             db.commit()
             
+            # Create transaction record for the debit
+            db.execute(
+                'INSERT INTO transactions (customer_id, type, amount, description) VALUES (?, ?, ?, ?)',
+                (customer_id, 'DEBIT', amount, f'Credit entry - Due in {due_days} days')
+            )
+            db.commit()
+            
             # Send immediate credit confirmation message
             try:
                 # Get customer details
@@ -505,15 +462,15 @@ def add_credit(customer_id=None):
                     
                     if customer and customer['phone']:
                         # Calculate outstanding balance
-                        total_credits = db.execute(
-                            'SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = ?',
-                            (customer_id,)
+                        total_debits = db.execute(
+                            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
+                            (customer_id, 'DEBIT')
                         ).fetchone()[0]
                         total_payments = db.execute(
-                            'SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = ?',
-                            (customer_id,)
+                            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
+                            (customer_id, 'PAYMENT')
                         ).fetchone()[0]
-                        outstanding_balance = total_credits - total_payments
+                        outstanding_balance = total_debits - total_payments
                         
                         # Only send if balance > 0
                         if outstanding_balance > 0:
@@ -580,17 +537,17 @@ def add_payment(customer_id=None):
         amount = float(request.form['amount'])
         
         # Calculate current outstanding balance
-        total_credits = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = ?',
-            (customer_id,)
+        total_debits = db.execute(
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
+            (customer_id, 'DEBIT')
         ).fetchone()[0]
         
         total_payments = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = ?',
-            (customer_id,)
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
+            (customer_id, 'PAYMENT')
         ).fetchone()[0]
         
-        outstanding_balance = total_credits - total_payments
+        outstanding_balance = total_debits - total_payments
         
         # Prevent negative balance
         if amount > outstanding_balance:
@@ -605,6 +562,14 @@ def add_payment(customer_id=None):
                 (customer_id, amount, payment_date)
             )
             db.commit()
+            
+            # Create transaction record for the payment
+            db.execute(
+                'INSERT INTO transactions (customer_id, type, amount, description) VALUES (?, ?, ?, ?)',
+                (customer_id, 'PAYMENT', amount, 'Payment received')
+            )
+            db.commit()
+            
             flash(f'Payment of {amount} recorded successfully!', 'success')
             # Instead of redirecting, show success page with action buttons
             customer = db.execute(
@@ -653,9 +618,9 @@ def overdue_list():
             c.due_date,
             c.due_days,
             (SELECT COALESCE(SUM(amount), 0) 
-             FROM credits WHERE customer_id = c.customer_id) as total_credits,
+             FROM transactions WHERE customer_id = c.customer_id AND type = 'DEBIT') as total_debits,
             (SELECT COALESCE(SUM(amount), 0) 
-             FROM payments WHERE customer_id = c.customer_id) as total_payments
+             FROM transactions WHERE customer_id = c.customer_id AND type = 'PAYMENT') as total_payments
         FROM credits c
         JOIN customers cust ON c.customer_id = cust.id
         WHERE c.due_date < ?
@@ -665,7 +630,7 @@ def overdue_list():
     # Calculate outstanding balance and filter
     overdue_with_balance = []
     for item in overdue_items:
-        outstanding_balance = item['total_credits'] - item['total_payments']
+        outstanding_balance = item['total_debits'] - item['total_payments']
         if outstanding_balance > 0:
             # Parse due_date string to date object for calculation
             due_date = datetime.strptime(item['due_date'], '%Y-%m-%d').date() if isinstance(item['due_date'], str) else item['due_date']
@@ -706,13 +671,13 @@ def ageing_report():
     balance_data = db.execute("""
         SELECT 
             id as customer_id,
-            (SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = customers.id) as total_credits,
-            (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = customers.id) as total_payments
+            (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = customers.id AND type = 'DEBIT') as total_debits,
+            (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = customers.id AND type = 'PAYMENT') as total_payments
         FROM customers
     """).fetchall()
     
     for row in balance_data:
-        balance = row['total_credits'] - row['total_payments']
+        balance = row['total_debits'] - row['total_payments']
         if balance > 0:
             customer_balances[row['customer_id']] = balance
     
@@ -853,20 +818,20 @@ def debtor_details():
             cust.id as customer_id,
             cust.name as customer_name,
             cust.phone,
-            (SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = cust.id) as total_credits,
-            (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = cust.id) as total_payments,
+            (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = cust.id AND type = 'DEBIT') as total_debits,
+            (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = cust.id AND type = 'PAYMENT') as total_payments,
             (SELECT MIN(due_date) FROM credits WHERE customer_id = cust.id AND due_date >= ?) as next_due_date,
             (SELECT COUNT(*) FROM credits WHERE customer_id = cust.id AND due_date < ?) as overdue_count
         FROM customers cust
-        WHERE (SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = cust.id) -
-              (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = cust.id) > 0
+        WHERE (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = cust.id AND type = 'DEBIT') -
+              (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = cust.id AND type = 'PAYMENT') > 0
         ORDER BY cust.name
     """, (today, today)).fetchall()
     
     # Build debtor list
     debtor_list = []
     for row in debtor_data:
-        outstanding_balance = max(0, row['total_credits'] - row['total_payments'])  # Ensure no negative
+        outstanding_balance = max(0, row['total_debits'] - row['total_payments'])  # Ensure no negative
         
         # Get next due date (earliest future due date, or earliest past due date if no future)
         next_due_date = row['next_due_date']

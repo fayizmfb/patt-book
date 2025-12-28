@@ -41,35 +41,31 @@
     <table>
         <thead>
             <tr>
-                <th>Date</th>
+                <th>Date & Time</th>
                 <th>Type</th>
                 <th>Amount</th>
-                <th>Balance After</th>
-                <th>Due Date</th>
+                <th>Description</th>
             </tr>
         </thead>
         <tbody>
             {% for transaction in transactions %}
             <tr>
-                <td>{{ transaction['date'] }}</td>
+                <td>{{ transaction['created_at'] }}</td>
                 <td>
-                    {% if transaction['type'] == 'debit' %}
+                    {% if transaction['type'] == 'DEBIT' %}
                         <span class="badge badge-danger">Debit</span>
                     {% else %}
                         <span class="badge badge-success">Payment</span>
                     {% endif %}
                 </td>
                 <td class="text-right">
-                    {% if transaction['type'] == 'debit' %}
-                        <span style="color: #e74c3c;">+${{ "%.2f"|format(transaction['amount']) }}</span>
+                    {% if transaction['type'] == 'DEBIT' %}
+                        <span style="color: #e74c3c;">${{ "%.2f"|format(transaction['amount']) }}</span>
                     {% else %}
-                        <span style="color: #27ae60;">-${{ "%.2f"|format(transaction['amount']) }}</span>
+                        <span style="color: #27ae60;">${{ "%.2f"|format(transaction['amount']) }}</span>
                     {% endif %}
                 </td>
-                <td class="text-right">
-                    <strong>${{ "%.2f"|format(transaction['balance_after']) }}</strong>
-                </td>
-                <td>{{ transaction['due_date'] or '-' }}</td>
+                <td>{{ transaction['description'] or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>

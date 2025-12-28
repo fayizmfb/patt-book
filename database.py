@@ -54,6 +54,19 @@ def init_db():
             )
         """)
         
+        # Create transactions table (Unified transaction history)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('DEBIT', 'PAYMENT')),
+                amount REAL NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (customer_id) REFERENCES customers (id)
+            )
+        """)
+        
         # Create settings table (for admin configuration)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -173,6 +186,8 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_credits_customer ON credits(customer_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_credits_due_date ON credits(due_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_customer ON payments(customer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_retailers_user_id ON retailers(user_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_retailers_status ON retailers(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_admin ON audit_logs(admin_user)")
