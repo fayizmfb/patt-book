@@ -30,6 +30,15 @@
         font-size: 13px;
         color: #666;
     }
+    
+    /* Overdue row styling */
+    .overdue-row {
+        background-color: #fff5f5;
+    }
+    
+    .overdue-row:hover {
+        background-color: #ffeaea;
+    }
 </style>
 {% endblock %}
 
@@ -42,17 +51,19 @@
         <div>
             <label for="sort_select" style="margin-right: 10px; font-weight: 600;">Sort by:</label>
             <select id="sort_select" onchange="window.location.href='{{ url_for('debtor_details') }}?sort=' + this.value" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                <option value="new_to_old" {% if sort_option == 'new_to_old' %}selected{% endif %}>New to Old</option>
-                <option value="old_to_new" {% if sort_option == 'old_to_new' %}selected{% endif %}>Old to New</option>
-                <option value="large_to_small" {% if sort_option == 'large_to_small' %}selected{% endif %}>Large Amount to Small</option>
-                <option value="small_to_large" {% if sort_option == 'small_to_large' %}selected{% endif %}>Small Amount to Large</option>
+                <option value="due_asc" {% if sort_option == 'due_asc' %}selected{% endif %}>Due Date (Soonest First)</option>
+                <option value="due_desc" {% if sort_option == 'due_desc' %}selected{% endif %}>Due Date (Latest First)</option>
+                <option value="balance_desc" {% if sort_option == 'balance_desc' %}selected{% endif %}>Balance (High to Low)</option>
+                <option value="balance_asc" {% if sort_option == 'balance_asc' %}selected{% endif %}>Balance (Low to High)</option>
+                <option value="name_asc" {% if sort_option == 'name_asc' %}selected{% endif %}>Name (A-Z)</option>
+                <option value="name_desc" {% if sort_option == 'name_desc' %}selected{% endif %}>Name (Z-A)</option>
             </select>
         </div>
     </div>
     
     <p style="color: #666; margin-bottom: 20px;">
-        Showing overdue customers with outstanding balances (as of {{ today }})
-        <br><small>Select customers using checkboxes for future actions</small>
+        Showing all customers with outstanding balances > 0 (as of {{ today }})
+        <br><small>Overdue accounts are highlighted in red</small>
     </p>
     
     {% if debtor_list %}
@@ -63,16 +74,17 @@
                     <!-- Checkbox column header (optional) -->
                 </th>
                 <th>Customer Name</th>
-                <th class="text-right">Outstanding Balance & Days</th>
+                <th>Phone</th>
+                <th class="text-right">Outstanding Balance</th>
                 <th>Due Date</th>
+                <th>Status</th>
                 <th>Ageing Bucket</th>
             </tr>
         </thead>
         <tbody>
             {% for debtor in debtor_list %}
-            <tr>
+            <tr class="{% if debtor['status'] == 'overdue' %}overdue-row{% endif %}">
                 <!-- Checkbox column: Optional selection for future actions -->
-                <!-- Selection state does not affect the display of balance/days information -->
                 <td style="text-align: center;">
                     <input type="checkbox" 
                            class="debtor-checkbox" 
@@ -82,27 +94,40 @@
                 </td>
                 
                 <!-- Customer name column -->
-                <td><strong>{{ debtor['customer_name'] }}</strong></td>
+                <td>
+                    <strong>{{ debtor['customer_name'] }}</strong>
+                    {% if debtor['overdue_count'] > 0 %}
+                        <br><small style="color: #e74c3c;">{{ debtor['overdue_count'] }} overdue credit(s)</small>
+                    {% endif %}
+                </td>
                 
-                <!-- Balance and Days Overdue column: Always shows both regardless of checkbox state -->
-                <!-- Outstanding balance displayed on top, days overdue shown below -->
+                <!-- Phone column -->
+                <td>{{ debtor['phone'] or 'N/A' }}</td>
+                
+                <!-- Outstanding balance column -->
                 <td class="text-right">
-                    <div class="balance-days-container">
-                        <div class="outstanding-balance">
-                            {{ "%.2f"|format(debtor['outstanding_balance']) }}
-                        </div>
-                        <div class="days-overdue-text">
-                            {{ debtor['days_overdue'] }} days overdue
-                        </div>
+                    <div class="outstanding-balance">
+                        {{ "%.2f"|format(debtor['outstanding_balance']) }}
                     </div>
                 </td>
                 
                 <!-- Due date column -->
                 <td>{{ debtor['due_date'] }}</td>
                 
+                <!-- Status column -->
+                <td>
+                    {% if debtor['status'] == 'overdue' %}
+                        <span class="badge badge-danger">OVERDUE</span>
+                    {% else %}
+                        <span class="badge" style="background-color: #27ae60; color: white;">CURRENT</span>
+                    {% endif %}
+                </td>
+                
                 <!-- Ageing bucket column -->
                 <td>
-                    <span class="badge badge-danger">{{ debtor['bucket'] }}</span>
+                    <span class="badge {% if debtor['status'] == 'overdue' %}badge-danger{% else %}badge-warning{% endif %}">
+                        {{ debtor['bucket'] }}
+                    </span>
                 </td>
             </tr>
             {% endfor %}
@@ -110,7 +135,7 @@
     </table>
     {% else %}
     <p style="text-align: center; padding: 40px; color: #666;">
-        No overdue debts found. All accounts are up to date!
+        No customers with outstanding balances found. All accounts are settled!
     </p>
     {% endif %}
     

@@ -810,54 +810,68 @@ def customer_ledger(customer_id):
 
 
 # ============================================================================
-# DEBTOR DETAILS - Shows overdue customers with sorting options
+# DEBTOR DETAILS - Shows all customers with outstanding balance > 0
 # ============================================================================
 
 @app.route('/debtors')
 @require_login
 def debtor_details():
     """
-    Show debtor list with customer name, outstanding balance, due date, 
-    days overdue, and ageing bucket. Supports multiple sort options.
-    Shows one row per customer (uses oldest overdue due date for that customer)
+    Show all customers with outstanding balance > 0.
+    Shows one row per customer with their total outstanding balance,
+    next due date, and days until due (can be negative for overdue).
     """
     db = get_db()
     today = datetime.now().date()
     
-    # Get sort option from query parameter (default: new to old)
-    sort_option = request.args.get('sort', 'new_to_old')
+    # Get sort option from query parameter (default: due date ascending)
+    sort_option = request.args.get('sort', 'due_asc')
     
-    # Get customers with outstanding balance
-    # Query to get customer balances and earliest due date
+    # Get all customers with outstanding balance > 0
     debtor_data = db.execute("""
         SELECT
             cust.id as customer_id,
             cust.name as customer_name,
+            cust.phone,
             (SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = cust.id) as total_credits,
             (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = cust.id) as total_payments,
-            (SELECT MIN(due_date) FROM credits WHERE customer_id = cust.id) as earliest_due_date
+            (SELECT MIN(due_date) FROM credits WHERE customer_id = cust.id AND due_date >= ?) as next_due_date,
+            (SELECT COUNT(*) FROM credits WHERE customer_id = cust.id AND due_date < ?) as overdue_count
         FROM customers cust
         WHERE (SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = cust.id) -
               (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = cust.id) > 0
-    """).fetchall()
+        ORDER BY cust.name
+    """, (today, today)).fetchall()
     
-    # Build debtor list with bucket assignment (one per customer)
+    # Build debtor list
     debtor_list = []
     for row in debtor_data:
-        outstanding_balance = row['total_credits'] - row['total_payments']
-        if outstanding_balance > 0 and row['earliest_due_date']:
-            due_date_str = row['earliest_due_date']
-            # Parse due date to calculate days overdue
-            if isinstance(due_date_str, str):
-                due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+        outstanding_balance = max(0, row['total_credits'] - row['total_payments'])  # Ensure no negative
+        
+        # Get next due date (earliest future due date, or earliest past due date if no future)
+        next_due_date = row['next_due_date']
+        if not next_due_date:
+            # If no future due dates, get the most recent past due date
+            past_due = db.execute("""
+                SELECT MAX(due_date) FROM credits 
+                WHERE customer_id = ? AND due_date < ?
+            """, (row['customer_id'], today)).fetchone()[0]
+            next_due_date = past_due
+        
+        if next_due_date:
+            # Calculate days until due (can be negative for overdue)
+            if isinstance(next_due_date, str):
+                due_date_obj = datetime.strptime(next_due_date, '%Y-%m-%d').date()
             else:
-                due_date = due_date_str
+                due_date_obj = next_due_date
             
-            days_overdue = (today - due_date).days
+            days_until_due = (due_date_obj - today).days
             
-            # Only include if overdue (days_overdue > 0)
-            if days_overdue > 0:
-                # Assign to ageing bucket based on days overdue
+            # Determine status and bucket
+            if days_until_due < 0:
+                status = 'overdue'
+                days_overdue = abs(days_until_due)
+                # Ageing bucket for overdue
                 if days_overdue <= 7:
                     bucket = '0-7 days'
                 elif days_overdue <= 10:
@@ -874,30 +888,55 @@ def debtor_details():
                     bucket = '31-45 days'
                 else:
                     bucket = 'Over 45 days'
-                
-                debtor_list.append({
-                    'customer_name': row['customer_name'],
-                    'outstanding_balance': outstanding_balance,
-                    'due_date': due_date_str,
-                    'days_overdue': days_overdue,
-                    'bucket': bucket
-                })
+            else:
+                status = 'current'
+                days_overdue = 0
+                # Bucket for current accounts
+                if days_until_due <= 7:
+                    bucket = 'Due within 7 days'
+                elif days_until_due <= 14:
+                    bucket = 'Due within 14 days'
+                elif days_until_due <= 30:
+                    bucket = 'Due within 30 days'
+                else:
+                    bucket = 'Due in 30+ days'
+            
+            debtor_list.append({
+                'customer_id': row['customer_id'],
+                'customer_name': row['customer_name'],
+                'phone': row['phone'],
+                'outstanding_balance': outstanding_balance,
+                'due_date': next_due_date,
+                'days_until_due': days_until_due,
+                'days_overdue': days_overdue,
+                'status': status,
+                'bucket': bucket,
+                'overdue_count': row['overdue_count']
+            })
     
-    # Apply sorting based on user selection
-    if sort_option == 'new_to_old':
-        # Sort by due_date descending (newest overdue first) - default
-        debtor_list.sort(key=lambda x: x['due_date'], reverse=True)
-    elif sort_option == 'old_to_new':
-        # Sort by due_date ascending (oldest overdue first)
-        debtor_list.sort(key=lambda x: x['due_date'])
-    elif sort_option == 'large_to_small':
-        # Sort by outstanding balance descending
+    # Apply sorting
+    if sort_option == 'due_asc':
+        debtor_list.sort(key=lambda x: x['days_until_due'])
+    elif sort_option == 'due_desc':
+        debtor_list.sort(key=lambda x: x['days_until_due'], reverse=True)
+    elif sort_option == 'balance_desc':
         debtor_list.sort(key=lambda x: x['outstanding_balance'], reverse=True)
-    elif sort_option == 'small_to_large':
-        # Sort by outstanding balance ascending
+    elif sort_option == 'balance_asc':
         debtor_list.sort(key=lambda x: x['outstanding_balance'])
+    elif sort_option == 'name_asc':
+        debtor_list.sort(key=lambda x: x['customer_name'])
+    elif sort_option == 'name_desc':
+        debtor_list.sort(key=lambda x: x['customer_name'], reverse=True)
     
-    return render_template('debtor_details.html', debtor_list=debtor_list, sort_option=sort_option, today=today)
+    # Debug: Print debtor list for verification
+    print(f"DEBUG: Found {len(debtor_list)} debtors")
+    for debtor in debtor_list[:3]:  # Print first 3 for debugging
+        print(f"  {debtor['customer_name']}: {debtor['outstanding_balance']:.2f}, due: {debtor['due_date']}, days: {debtor['days_until_due']}")
+    
+    return render_template('debtor_details.html', 
+                         debtor_list=debtor_list, 
+                         sort_option=sort_option, 
+                         today=today)
 
 
 # ============================================================================
