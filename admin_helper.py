@@ -98,14 +98,14 @@ def get_retailer_stats():
         # Total outstanding amount
         total_credits = db.execute('SELECT COALESCE(SUM(amount), 0) FROM credits').fetchone()[0]
         total_payments = db.execute('SELECT COALESCE(SUM(amount), 0) FROM payments').fetchone()[0]
-        total_outstanding = total_credits - total_payments
+        total_outstanding = max(0, total_credits - total_payments)
         
         return {
             'total_retailers': total_retailers,
             'active_retailers': active_retailers,
             'inactive_retailers': inactive_retailers,
             'total_customers': total_customers,
-            'total_outstanding': total_outstanding if total_outstanding > 0 else 0
+            'total_outstanding': total_outstanding
         }
     except Exception as e:
         print(f"Error getting retailer stats: {str(e)}")

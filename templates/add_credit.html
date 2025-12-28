@@ -15,7 +15,7 @@
             <select id="customer_id" name="customer_id" required>
                 <option value="">Select a customer</option>
                 {% for customer in customers %}
-                <option value="{{ customer['id'] }}">{{ customer['name'] }}</option>
+                <option value="{{ customer['id'] }}" {% if selected_customer and selected_customer['id'] == customer['id'] %}selected{% endif %}>{{ customer['name'] }}</option>
                 {% endfor %}
             </select>
         </div>

@@ -22,11 +22,33 @@
             <textarea id="address" name="address" placeholder="Enter customer address"></textarea>
         </div>
         
+        <div class="form-group">
+            <label for="debit_amount">Initial Debit Amount (Optional)</label>
+            <input type="number" id="debit_amount" name="debit_amount" step="0.01" min="0" placeholder="Enter amount if customer owes money immediately">
+            <small style="color: #666;">If specified, this will create the first credit entry for this customer</small>
+        </div>
+        
+        <div class="form-group" id="due_days_group" style="display: none;">
+            <label for="due_days">Due Days (5-30)</label>
+            <input type="number" id="due_days" name="due_days" min="5" max="30" value="15" placeholder="Number of days until payment is due">
+        </div>
+        
         <div class="actions">
             <button type="submit" class="btn-success">Add Customer</button>
             <a href="{{ url_for('dashboard') }}" class="btn">Cancel</a>
         </div>
     </form>
 </div>
+
+<script>
+document.getElementById('debit_amount').addEventListener('input', function() {
+    const dueDaysGroup = document.getElementById('due_days_group');
+    if (this.value && parseFloat(this.value) > 0) {
+        dueDaysGroup.style.display = 'block';
+    } else {
+        dueDaysGroup.style.display = 'none';
+    }
+});
+</script>
 {% endblock %}
 

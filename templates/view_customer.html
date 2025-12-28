@@ -4,9 +4,16 @@
 
 {% block content %}
 <div class="card">
-    <h2>Customer Details</h2>
-    
-    <table style="max-width: 600px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>{{ customer['name'] }} - Customer Details</h2>
+        <div style="text-align: right;">
+            <div style="font-size: 18px; font-weight: bold; color: #e74c3c;">
+                Outstanding: ${{ "%.2f"|format(outstanding_balance) }}
+            </div>
+        </div>
+    </div>
+
+    <table style="max-width: 600px; margin-bottom: 30px;">
         <tr>
             <th style="width: 150px;">ID</th>
             <td>{{ customer['id'] }}</td>
@@ -24,9 +31,58 @@
             <td>{{ customer['address'] or '-' }}</td>
         </tr>
     </table>
-    
+
+    <h3>Transaction Ledger</h3>
+    <p style="color: #666; margin-bottom: 15px;">
+        Complete transaction history sorted from newest to oldest
+    </p>
+
+    {% if transactions %}
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Balance After</th>
+                <th>Due Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for transaction in transactions %}
+            <tr>
+                <td>{{ transaction['date'] }}</td>
+                <td>
+                    {% if transaction['type'] == 'debit' %}
+                        <span class="badge badge-danger">Debit</span>
+                    {% else %}
+                        <span class="badge badge-success">Payment</span>
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    {% if transaction['type'] == 'debit' %}
+                        <span style="color: #e74c3c;">+${{ "%.2f"|format(transaction['amount']) }}</span>
+                    {% else %}
+                        <span style="color: #27ae60;">-${{ "%.2f"|format(transaction['amount']) }}</span>
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    <strong>${{ "%.2f"|format(transaction['balance_after']) }}</strong>
+                </td>
+                <td>{{ transaction['due_date'] or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; padding: 40px; color: #666;">
+        No transactions found for this customer.
+    </p>
+    {% endif %}
+
     <div class="actions" style="margin-top: 20px;">
-        <a href="{{ url_for('customer_ledger', customer_id=customer['id']) }}" class="btn">View Ledger</a>
+        <a href="{{ url_for('add_credit', customer_id=customer['id']) }}" class="btn btn-success">Add Debit Amount</a>
+        <a href="{{ url_for('add_payment', customer_id=customer['id']) }}" class="btn btn-primary">Add Payment</a>
         <a href="{{ url_for('index') }}" class="btn">Back to Customers</a>
     </div>
 </div>

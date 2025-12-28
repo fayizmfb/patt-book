@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Credit Entry Added - Retail App{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="color: #27ae60;">✓ Credit Entry Added Successfully!</h2>
+
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3>Transaction Details</h3>
+        <table style="max-width: 400px;">
+            <tr>
+                <th style="width: 150px;">Customer</th>
+                <td><strong>{{ customer['name'] }}</strong></td>
+            </tr>
+            <tr>
+                <th>Credit Amount</th>
+                <td style="color: #e74c3c; font-weight: bold;">${{ "%.2f"|format(amount) }}</td>
+            </tr>
+            <tr>
+                <th>Due Date</th>
+                <td>{{ due_date }}</td>
+            </tr>
+        </table>
+    </div>
+
+    <p style="color: #666; margin-bottom: 20px;">
+        What would you like to do next?
+    </p>
+
+    <div class="actions" style="display: flex; gap: 15px; flex-wrap: wrap;">
+        <a href="{{ url_for('add_credit') }}" class="btn btn-success" style="flex: 1; min-width: 200px;">
+            ➕ Add Another Debit Amount
+        </a>
+        <a href="{{ url_for('add_payment') }}" class="btn btn-primary" style="flex: 1; min-width: 200px;">
+            💰 Add Payment Received
+        </a>
+        <a href="{{ url_for('view_customer', customer_id=customer['id']) }}" class="btn btn-info" style="flex: 1; min-width: 200px;">
+            📊 View Customer Ledger
+        </a>
+        <a href="{{ url_for('index') }}" class="btn" style="flex: 1; min-width: 200px;">
+            🏠 Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}

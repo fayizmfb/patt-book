@@ -49,7 +49,7 @@ def get_customer_balance(customer_id):
         (customer_id,)
     ).fetchone()[0]
     
-    return float(total_credits) - float(total_payments)
+    return max(0, float(total_credits) - float(total_payments))
 
 
 def get_overdue_credits():

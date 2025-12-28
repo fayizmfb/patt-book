@@ -230,6 +230,8 @@ def add_customer():
         name = request.form['name']
         phone = request.form['phone']
         address = request.form['address']
+        debit_amount = request.form.get('debit_amount', '').strip()
+        due_days = request.form.get('due_days', '15').strip()
         
         if not name:
             flash('Customer name is required!', 'error')
@@ -237,11 +239,33 @@ def add_customer():
         
         db = get_db()
         try:
-            db.execute(
+            # Insert customer
+            cursor = db.execute(
                 'INSERT INTO customers (name, phone, address) VALUES (?, ?, ?)',
                 (name, phone, address)
             )
+            customer_id = cursor.lastrowid
             db.commit()
+            
+            # If debit amount is provided, create a credit entry
+            if debit_amount and float(debit_amount) > 0:
+                amount = float(debit_amount)
+                due_days_int = int(due_days) if due_days else 15
+                
+                # Validate due_days range (5-30 days)
+                if due_days_int < 5 or due_days_int > 30:
+                    flash('Due days must be between 5 and 30 days!', 'error')
+                    return render_template('add_customer.html')
+                
+                # Calculate due date automatically
+                entry_date = datetime.now().date()
+                due_date = entry_date + timedelta(days=due_days_int)
+                
+                db.execute(
+                    'INSERT INTO credits (customer_id, amount, entry_date, due_days, due_date) VALUES (?, ?, ?, ?, ?)',
+                    (customer_id, amount, entry_date, due_days_int, due_date)
+                )
+                db.commit()
             
             # Send welcome WhatsApp message if phone number is provided
             if phone:
@@ -270,18 +294,96 @@ def add_customer():
 @app.route('/customer/<int:customer_id>')
 @require_login
 def view_customer(customer_id):
-    """View customer details (requires login)"""
+    """View customer details and transaction ledger (requires login)"""
     db = get_db()
     customer = db.execute(
         'SELECT id, name, phone, address FROM customers WHERE id = ?',
         (customer_id,)
     ).fetchone()
-    
+
     if not customer:
         flash('Customer not found!', 'error')
         return redirect(url_for('index'))
-    
-    return render_template('view_customer.html', customer=customer)
+
+    # Get all transactions (credits and payments) for this customer
+    # Combine credits and payments into a single ledger
+    credits = db.execute("""
+        SELECT
+            'credit' as type,
+            id,
+            amount,
+            entry_date as transaction_date,
+            due_date,
+            due_days,
+            created_at
+        FROM credits
+        WHERE customer_id = ?
+    """, (customer_id,)).fetchall()
+
+    payments = db.execute("""
+        SELECT
+            'payment' as type,
+            id,
+            amount,
+            payment_date as transaction_date,
+            NULL as due_date,
+            NULL as due_days,
+            created_at
+        FROM payments
+        WHERE customer_id = ?
+    """, (customer_id,)).fetchall()
+
+    # Combine and sort transactions by date (newest first)
+    transactions = []
+    for credit in credits:
+        transactions.append({
+            'id': credit['id'],
+            'type': 'debit',  # Show as debit for user understanding
+            'amount': credit['amount'],
+            'date': credit['transaction_date'],
+            'due_date': credit['due_date'],
+            'due_days': credit['due_days'],
+            'created_at': credit['created_at']
+        })
+
+    for payment in payments:
+        transactions.append({
+            'id': payment['id'],
+            'type': 'payment',
+            'amount': payment['amount'],
+            'date': payment['transaction_date'],
+            'due_date': None,
+            'due_days': None,
+            'created_at': payment['created_at']
+        })
+
+    # Sort by date descending (newest first)
+    transactions.sort(key=lambda x: x['created_at'], reverse=True)
+
+    # Calculate running balance for each transaction
+    # Start from the beginning and work forward chronologically
+    chronological_transactions = sorted(transactions, key=lambda x: x['created_at'])
+
+    running_balance = 0.0
+    for transaction in chronological_transactions:
+        if transaction['type'] == 'debit':
+            running_balance += transaction['amount']
+        elif transaction['type'] == 'payment':
+            running_balance -= transaction['amount']
+        transaction['balance_after'] = max(0, running_balance)  # Ensure no negative
+
+    # Sort back to newest first for display
+    transactions.sort(key=lambda x: x['created_at'], reverse=True)
+
+    # Calculate current outstanding balance
+    total_credits = sum(t['amount'] for t in transactions if t['type'] == 'debit')
+    total_payments = sum(t['amount'] for t in transactions if t['type'] == 'payment')
+    outstanding_balance = max(0, total_credits - total_payments)
+
+    return render_template('view_customer.html',
+                         customer=customer,
+                         transactions=transactions,
+                         outstanding_balance=outstanding_balance)
 
 
 # ============================================================================
@@ -289,8 +391,9 @@ def view_customer(customer_id):
 # ============================================================================
 
 @app.route('/credit/add', methods=['GET', 'POST'])
+@app.route('/credit/add/<int:customer_id>', methods=['GET', 'POST'])
 @require_login
-def add_credit():
+def add_credit(customer_id=None):
     """Add a credit entry with auto-calculated due date (requires login)"""
     db = get_db()
     
@@ -364,13 +467,25 @@ def add_credit():
                     print(f"Warning: Could not send reminder WhatsApp: {str(e)}")
             
             flash(f'Credit entry added successfully! Due date: {due_date}', 'success')
-            return redirect(url_for('index'))
+            # Instead of redirecting, show success page with action buttons
+            customer = db.execute(
+                'SELECT id, name FROM customers WHERE id = ?',
+                (customer_id,)
+            ).fetchone()
+            return render_template('credit_success.html', customer=customer, amount=amount, due_date=due_date)
         except Exception as e:
             flash(f'Error adding credit entry: {str(e)}', 'error')
     
     # GET request - show form
     customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
-    return render_template('add_credit.html', customers=customers)
+    selected_customer = None
+    if customer_id:
+        selected_customer = db.execute(
+            'SELECT id, name FROM customers WHERE id = ?',
+            (customer_id,)
+        ).fetchone()
+
+    return render_template('add_credit.html', customers=customers, selected_customer=selected_customer)
 
 
 # ============================================================================
@@ -378,8 +493,9 @@ def add_credit():
 # ============================================================================
 
 @app.route('/payment/add', methods=['GET', 'POST'])
+@app.route('/payment/add/<int:customer_id>', methods=['GET', 'POST'])
 @require_login
-def add_payment():
+def add_payment(customer_id=None):
     """Add a payment entry that reduces outstanding balance (requires login)"""
     db = get_db()
     
@@ -414,13 +530,25 @@ def add_payment():
             )
             db.commit()
             flash(f'Payment of {amount} recorded successfully!', 'success')
-            return redirect(url_for('index'))
+            # Instead of redirecting, show success page with action buttons
+            customer = db.execute(
+                'SELECT id, name FROM customers WHERE id = ?',
+                (customer_id,)
+            ).fetchone()
+            return render_template('payment_success.html', customer=customer, amount=amount)
         except Exception as e:
             flash(f'Error adding payment: {str(e)}', 'error')
     
     # GET request - show form
     customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
-    return render_template('add_payment.html', customers=customers)
+    selected_customer = None
+    if customer_id:
+        selected_customer = db.execute(
+            'SELECT id, name FROM customers WHERE id = ?',
+            (customer_id,)
+        ).fetchone()
+
+    return render_template('add_payment.html', customers=customers, selected_customer=selected_customer)
 
 
 # ============================================================================
@@ -643,29 +771,26 @@ def debtor_details():
     # Get sort option from query parameter (default: new to old)
     sort_option = request.args.get('sort', 'new_to_old')
     
-    # Get customers with outstanding balance and their oldest overdue due date
-    # Query to get customer balances and oldest overdue due date
+    # Get customers with outstanding balance
+    # Query to get customer balances and earliest due date
     debtor_data = db.execute("""
-        SELECT 
+        SELECT
             cust.id as customer_id,
             cust.name as customer_name,
             (SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = cust.id) as total_credits,
             (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = cust.id) as total_payments,
-            (SELECT MIN(due_date) FROM credits 
-             WHERE customer_id = cust.id AND due_date < ?) as oldest_due_date
+            (SELECT MIN(due_date) FROM credits WHERE customer_id = cust.id) as earliest_due_date
         FROM customers cust
-        WHERE EXISTS (
-            SELECT 1 FROM credits c 
-            WHERE c.customer_id = cust.id AND c.due_date < ?
-        )
-    """, (today, today)).fetchall()
+        WHERE (SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = cust.id) -
+              (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = cust.id) > 0
+    """).fetchall()
     
     # Build debtor list with bucket assignment (one per customer)
     debtor_list = []
     for row in debtor_data:
         outstanding_balance = row['total_credits'] - row['total_payments']
-        if outstanding_balance > 0 and row['oldest_due_date']:
-            due_date_str = row['oldest_due_date']
+        if outstanding_balance > 0 and row['earliest_due_date']:
+            due_date_str = row['earliest_due_date']
             # Parse due date to calculate days overdue
             if isinstance(due_date_str, str):
                 due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
@@ -674,31 +799,33 @@ def debtor_details():
             
             days_overdue = (today - due_date).days
             
-            # Assign to ageing bucket based on oldest overdue date
-            if days_overdue <= 7:
-                bucket = '0-7 days'
-            elif days_overdue <= 10:
-                bucket = '8-10 days'
-            elif days_overdue <= 15:
-                bucket = '11-15 days'
-            elif days_overdue <= 20:
-                bucket = '16-20 days'
-            elif days_overdue <= 25:
-                bucket = '21-25 days'
-            elif days_overdue <= 30:
-                bucket = '26-30 days'
-            elif days_overdue <= 45:
-                bucket = '31-45 days'
-            else:
-                bucket = 'Over 45 days'
-            
-            debtor_list.append({
-                'customer_name': row['customer_name'],
-                'outstanding_balance': outstanding_balance,
-                'due_date': due_date_str,
-                'days_overdue': days_overdue,
-                'bucket': bucket
-            })
+            # Only include if overdue (days_overdue > 0)
+            if days_overdue > 0:
+                # Assign to ageing bucket based on days overdue
+                if days_overdue <= 7:
+                    bucket = '0-7 days'
+                elif days_overdue <= 10:
+                    bucket = '8-10 days'
+                elif days_overdue <= 15:
+                    bucket = '11-15 days'
+                elif days_overdue <= 20:
+                    bucket = '16-20 days'
+                elif days_overdue <= 25:
+                    bucket = '21-25 days'
+                elif days_overdue <= 30:
+                    bucket = '26-30 days'
+                elif days_overdue <= 45:
+                    bucket = '31-45 days'
+                else:
+                    bucket = 'Over 45 days'
+                
+                debtor_list.append({
+                    'customer_name': row['customer_name'],
+                    'outstanding_balance': outstanding_balance,
+                    'due_date': due_date_str,
+                    'days_overdue': days_overdue,
+                    'bucket': bucket
+                })
     
     # Apply sorting based on user selection
     if sort_option == 'new_to_old':
