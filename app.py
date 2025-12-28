@@ -228,11 +228,16 @@ def index():
 def add_customer():
     """Add a new customer to the master"""
     if request.method == 'POST':
-        name = request.form['name']
-        phone = request.form['phone']
-        address = request.form['address']
+        # Debug: Print form data
+        print(f"DEBUG: Form data received: {dict(request.form)}")
+        
+        name = request.form.get('name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        address = request.form.get('address', '').strip()
         debit_amount = request.form.get('debit_amount', '').strip()
-        due_days = request.form.get('due_days', '15').strip()
+        due_days = request.form.get('due_days', '30').strip()
+        
+        print(f"DEBUG: Processed data - name: '{name}', phone: '{phone}', address: '{address}', debit_amount: '{debit_amount}', due_days: '{due_days}'")
         
         if not name:
             flash('Customer name is required!', 'error')
@@ -247,6 +252,8 @@ def add_customer():
             )
             customer_id = cursor.lastrowid
             db.commit()
+            
+            print(f"DEBUG: Customer inserted with ID: {customer_id}")
             
             # If debit amount is provided, create a credit entry
             if debit_amount and float(debit_amount) > 0:
@@ -269,6 +276,8 @@ def add_customer():
                     (customer_id, amount, entry_date, due_days_int, due_date)
                 )
                 db.commit()
+                
+                print(f"DEBUG: Credit entry added for customer {customer_id}: amount={amount}, due_date={due_date}")
                 
                 # Send immediate credit confirmation message for initial debit
                 if phone:
@@ -308,11 +317,13 @@ def add_customer():
                     print(f"Warning: Could not send welcome WhatsApp: {str(e)}")
             
             db.close()
+            print(f"DEBUG: Customer creation completed successfully for: {name}")
             flash('Customer added successfully!', 'success')
             return redirect(url_for('dashboard'))
-        except sqlite3.IntegrityError:
+        except Exception as e:
             db.close()
-            flash('Error adding customer. Please try again.', 'error')
+            print(f"ERROR: Exception during customer creation: {str(e)}")
+            flash(f'Error adding customer: {str(e)}', 'error')
     
     return render_template('add_customer.html')
 
