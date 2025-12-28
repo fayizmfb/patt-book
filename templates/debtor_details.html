@@ -79,6 +79,7 @@
                 <th>Due Date</th>
                 <th>Status</th>
                 <th>Ageing Bucket</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -128,6 +129,15 @@
                     <span class="badge {% if debtor['status'] == 'overdue' %}badge-danger{% else %}badge-warning{% endif %}">
                         {{ debtor['bucket'] }}
                     </span>
+                </td>
+                
+                <!-- Actions column -->
+                <td>
+                    <a href="{{ url_for('add_payment', customer_id=debtor['customer_id']) }}" 
+                       class="btn btn-success btn-sm" 
+                       style="padding: 6px 12px; font-size: 12px;">
+                        💰 Pay
+                    </a>
                 </td>
             </tr>
             {% endfor %}

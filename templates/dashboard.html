@@ -56,6 +56,10 @@
         border-top: 4px solid #3498db;
     }
     
+    .card-payment {
+        border-top: 4px solid #27ae60;
+    }
+    
     .card-debtors {
         border-top: 4px solid #e74c3c;
     }
@@ -65,7 +69,7 @@
     }
     
     .card-about {
-        border-top: 4px solid #27ae60;
+        border-top: 4px solid #f39c12;
     }
 </style>
 {% endblock %}
@@ -77,6 +81,13 @@
         <div class="dashboard-card-icon">➕</div>
         <h3>Add Customer</h3>
         <p>Add new customer to the system</p>
+    </a>
+    
+    <!-- Add Payment Card -->
+    <a href="{{ url_for('add_payment') }}" class="dashboard-card card-payment">
+        <div class="dashboard-card-icon">💰</div>
+        <h3>Add Payment</h3>
+        <p>Record customer payment</p>
     </a>
     
     <!-- Debtor Details Card -->
