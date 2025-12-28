@@ -6,7 +6,7 @@ A simple Flask application for managing customer credits and payments
 from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, make_response
 from datetime import datetime, timedelta
 from database import init_db, get_db
-from whatsapp_helper import send_whatsapp_message, prepare_welcome_message, prepare_reminder_message
+from whatsapp_helper import send_whatsapp_message, prepare_welcome_message, prepare_credit_confirmation_message, prepare_pre_due_reminder_message
 from firebase_config import (
     get_user_store_data, save_user_store_data,
     is_user_logged_in, get_current_user_id, get_current_user_phone
@@ -267,6 +267,27 @@ def add_customer():
                     (customer_id, amount, entry_date, due_days_int, due_date)
                 )
                 db.commit()
+                
+                # Send immediate credit confirmation message for initial debit
+                if phone:
+                    try:
+                        # Get store name from settings
+                        store_setting = db.execute(
+                            "SELECT value FROM settings WHERE key = 'store_name'"
+                        ).fetchone()
+                        store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
+                        
+                        # Prepare and send credit confirmation message
+                        confirmation_msg = prepare_credit_confirmation_message(
+                            name,
+                            store_name,
+                            amount,
+                            due_date
+                        )
+                        send_whatsapp_message(phone, confirmation_msg)
+                    except Exception as e:
+                        # Don't fail customer creation if WhatsApp fails
+                        print(f"Warning: Could not send initial credit confirmation WhatsApp: {str(e)}")
             
             # Send welcome WhatsApp message if phone number is provided
             if phone:
@@ -426,6 +447,33 @@ def add_credit(customer_id=None):
                 (customer_id, amount, entry_date, due_days, due_date)
             )
             db.commit()
+            
+            # Send immediate credit confirmation message
+            try:
+                # Get customer details
+                customer = db.execute(
+                    'SELECT name, phone FROM customers WHERE id = ?',
+                    (customer_id,)
+                ).fetchone()
+                
+                if customer and customer['phone']:
+                    # Get store name from settings
+                    store_setting = db.execute(
+                        "SELECT value FROM settings WHERE key = 'store_name'"
+                    ).fetchone()
+                    store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
+                    
+                    # Prepare and send credit confirmation message
+                    confirmation_msg = prepare_credit_confirmation_message(
+                        customer['name'],
+                        store_name,
+                        amount,
+                        due_date
+                    )
+                    send_whatsapp_message(customer['phone'], confirmation_msg)
+            except Exception as e:
+                # Don't fail credit entry if WhatsApp fails
+                print(f"Warning: Could not send credit confirmation WhatsApp: {str(e)}")
             
             # Check if due date is today or has passed, and send reminder if needed
             # This will send reminder immediately if due date equals today or is in the past

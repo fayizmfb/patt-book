@@ -115,19 +115,18 @@ Thank you!"""
     return message
 
 
-def prepare_reminder_message(customer_name, store_name, outstanding_amount, due_date, days_overdue=0):
+def prepare_credit_confirmation_message(customer_name, store_name, amount, due_date):
     """
-    Prepare payment reminder message when due date arrives or has passed
+    Prepare immediate confirmation message when credit is granted
     
     Args:
         customer_name: Name of the customer
         store_name: Name of the store from settings
-        outstanding_amount: Outstanding balance amount
+        amount: Credit amount granted
         due_date: Due date for the payment (string format: 'YYYY-MM-DD' or date object)
-        days_overdue: Number of days since due date (0 if due today, >0 if overdue)
     
     Returns:
-        str: Formatted reminder message
+        str: Formatted credit confirmation message
     """
     # Format due date as string if it's a date object
     if hasattr(due_date, 'strftime'):
@@ -135,32 +134,159 @@ def prepare_reminder_message(customer_name, store_name, outstanding_amount, due_
     else:
         due_date_str = str(due_date)
     
-    # Build message with or without days overdue
-    if days_overdue > 0:
-        days_info = f"\n• Days Overdue: {days_overdue} days"
-    else:
-        days_info = ""
-    
     message = f"""Hello {customer_name},
 
-This is a payment reminder from Patt Book on behalf of {store_name}.
+Thank you for your purchase at {store_name}!
 
-Payment Details:
+Credit Details:
 • Store: {store_name}
-• Outstanding Amount: {outstanding_amount:.2f}
-• Due Date: {due_date_str}{days_info}
+• Credit Amount: {amount:.2f}
+• Due Date: {due_date_str}
 
-Please settle your outstanding balance with {store_name}.
+Please keep this information for your records.
 
 IMPORTANT:
 • Patt Book does NOT collect payments
-• Do NOT make payments through any links or apps sent via WhatsApp
-• Always verify and make payments directly with {store_name} to avoid fraud
-• This is only a reminder service - Patt Book cannot process payments
+• Do NOT make payments through any links or apps
+• Always verify payment requests directly with {store_name} to avoid fraud
 
-For payment arrangements, please contact {store_name} directly.
+For any questions, please contact {store_name} directly.
 
 Thank you!"""
     
     return message
+
+
+def prepare_pre_due_reminder_message(customer_name, store_name, outstanding_balance, due_date, days_until_due):
+    """
+    Prepare pre-due reminder message sent before payment is due
+    
+    Args:
+        customer_name: Name of the customer
+        store_name: Name of the store from settings
+        outstanding_balance: Current outstanding balance for the customer
+        due_date: Due date for the payment (date object)
+        days_until_due: Number of days until due date
+    
+    Returns:
+        str: Formatted pre-due reminder message
+    """
+    # Format due date as string
+    if hasattr(due_date, 'strftime'):
+        due_date_str = due_date.strftime('%Y-%m-%d')
+    else:
+        due_date_str = str(due_date)
+    
+    message = f"""Hello {customer_name},
+
+This is a friendly reminder from {store_name}.
+
+Payment Reminder:
+• Store: {store_name}
+• Outstanding Balance: {outstanding_balance:.2f}
+• Due Date: {due_date_str}
+• Days Until Due: {days_until_due}
+
+Please plan to settle your account by the due date.
+
+IMPORTANT:
+• Patt Book does NOT collect payments
+• Do NOT make payments through any links or apps
+• Always verify payment requests directly with {store_name} to avoid fraud
+
+For any questions, please contact {store_name} directly.
+
+Thank you!"""
+    
+    return message
+
+
+def send_pre_due_reminders():
+    """
+    Check for credits that need pre-due reminders and send them
+    
+    This function should be called periodically (e.g., daily) to send
+    reminders before due dates.
+    
+    Reminder timing: reminder_date = due_date - (due_days / 2)
+    """
+    from database import get_db
+    from datetime import datetime, timedelta
+    
+    db = get_db()
+    today = datetime.now().date()
+    
+    try:
+        # Find credits where reminder should be sent today
+        # reminder_date = due_date - (due_days / 2)
+        credits_needing_reminder = db.execute("""
+            SELECT 
+                c.id as credit_id,
+                c.customer_id,
+                c.amount,
+                c.due_date,
+                c.due_days,
+                cust.name as customer_name,
+                cust.phone,
+                (c.due_date - (c.due_days / 2)) as reminder_date
+            FROM credits c
+            JOIN customers cust ON c.customer_id = cust.id
+            WHERE c.due_date > ?
+            AND (c.due_date - (c.due_days / 2)) = ?
+            AND cust.phone IS NOT NULL
+            AND cust.phone != ''
+        """, (today, today)).fetchall()
+        
+        # Get store name
+        store_setting = db.execute(
+            "SELECT value FROM settings WHERE key = 'store_name'"
+        ).fetchone()
+        store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
+        
+        reminders_sent = 0
+        
+        for credit in credits_needing_reminder:
+            try:
+                # Calculate current outstanding balance for this customer
+                total_credits = db.execute(
+                    'SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = ?',
+                    (credit['customer_id'],)
+                ).fetchone()[0]
+                
+                total_payments = db.execute(
+                    'SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = ?',
+                    (credit['customer_id'],)
+                ).fetchone()[0]
+                
+                outstanding_balance = max(0, total_credits - total_payments)
+                
+                # Only send if there's still an outstanding balance
+                if outstanding_balance > 0:
+                    # Calculate days until due
+                    days_until_due = (credit['due_date'] - today).days
+                    
+                    # Prepare and send pre-due reminder
+                    reminder_msg = prepare_pre_due_reminder_message(
+                        credit['customer_name'],
+                        store_name,
+                        outstanding_balance,
+                        credit['due_date'],
+                        days_until_due
+                    )
+                    
+                    if send_whatsapp_message(credit['phone'], reminder_msg):
+                        reminders_sent += 1
+                        print(f"Pre-due reminder sent to {credit['customer_name']} for credit ID {credit['credit_id']}")
+            
+            except Exception as e:
+                print(f"Error sending pre-due reminder for credit ID {credit['credit_id']}: {str(e)}")
+        
+        print(f"Pre-due reminder check completed. Sent {reminders_sent} reminders.")
+        return reminders_sent
+        
+    except Exception as e:
+        print(f"Error in send_pre_due_reminders: {str(e)}")
+        return 0
+    finally:
+        db.close()
 

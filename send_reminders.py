@@ -8,7 +8,7 @@ Usage:
 
 from datetime import datetime
 from database import get_db
-from whatsapp_helper import send_whatsapp_message, prepare_reminder_message
+from whatsapp_helper import send_whatsapp_message, prepare_reminder_message, send_pre_due_reminders
 
 
 def check_and_send_reminders():
@@ -80,21 +80,30 @@ def check_and_send_reminders():
                     
                     if send_whatsapp_message(row['phone'], reminder_msg):
                         reminders_sent += 1
-                        print(f"Reminder sent to {row['customer_name']} ({row['phone']}) - {days_overdue} days overdue")
+                        print(f"Overdue reminder sent to {row['customer_name']} ({row['phone']}) - {days_overdue} days overdue")
                 except Exception as e:
-                    print(f"Error sending reminder to {row['customer_name']}: {str(e)}")
+                    print(f"Error sending overdue reminder to {row['customer_name']}: {str(e)}")
         
-        print(f"Reminder check completed. Sent {reminders_sent} reminder(s) for {today}")
+        print(f"Overdue reminder check completed. Sent {reminders_sent} reminder(s) for {today}")
         return reminders_sent
         
     except Exception as e:
-        print(f"Error in reminder check: {str(e)}")
+        print(f"Error in overdue reminder check: {str(e)}")
         return 0
     finally:
         db.close()
 
 
 if __name__ == '__main__':
-    print(f"Checking for due date reminders on {datetime.now().date()}...")
-    check_and_send_reminders()
+    print(f"Checking for WhatsApp reminders on {datetime.now().date()}...")
+    
+    # Send pre-due reminders first
+    print("Sending pre-due reminders...")
+    pre_due_count = send_pre_due_reminders()
+    
+    # Then send overdue reminders
+    print("Sending overdue reminders...")
+    overdue_count = check_and_send_reminders()
+    
+    print(f"Total reminders sent: {pre_due_count + overdue_count} (Pre-due: {pre_due_count}, Overdue: {overdue_count})")
 
