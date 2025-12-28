@@ -250,17 +250,18 @@ def add_customer():
             # If debit amount is provided, create a credit entry
             if debit_amount and float(debit_amount) > 0:
                 amount = float(debit_amount)
-                due_days_int = int(due_days) if due_days else 15
-                
-                # Validate due_days range (5-30 days)
-                if due_days_int < 5 or due_days_int > 30:
-                    flash('Due days must be between 5 and 30 days!', 'error')
+                due_days_int = int(due_days) if due_days else 30
+
+                # Validate due_days - must be one of the allowed options
+                allowed_due_days = [7, 10, 14, 21, 25, 30, 45, 60]
+                if due_days_int not in allowed_due_days:
+                    flash('Please select a valid due days option!', 'error')
                     return render_template('add_customer.html')
-                
+
                 # Calculate due date automatically
                 entry_date = datetime.now().date()
                 due_date = entry_date + timedelta(days=due_days_int)
-                
+
                 db.execute(
                     'INSERT INTO credits (customer_id, amount, entry_date, due_days, due_date) VALUES (?, ?, ?, ?, ?)',
                     (customer_id, amount, entry_date, due_days_int, due_date)
@@ -402,11 +403,18 @@ def add_credit(customer_id=None):
         amount = float(request.form['amount'])
         due_days = int(request.form['due_days'])
         
-        # Validate due_days range (5-30 days)
-        if due_days < 5 or due_days > 30:
-            flash('Due days must be between 5 and 30 days!', 'error')
+        # Validate due_days - must be one of the allowed options
+        allowed_due_days = [7, 10, 14, 21, 25, 30, 45, 60]
+        if due_days not in allowed_due_days:
+            flash('Please select a valid due days option!', 'error')
             customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
-            return render_template('add_credit.html', customers=customers)
+            selected_customer_obj = None
+            if 'customer_id' in request.form and request.form['customer_id']:
+                selected_customer_obj = db.execute(
+                    'SELECT id, name FROM customers WHERE id = ?',
+                    (request.form['customer_id'],)
+                ).fetchone()
+            return render_template('add_credit.html', customers=customers, selected_customer=selected_customer_obj)
         
         # Calculate due date automatically
         entry_date = datetime.now().date()
