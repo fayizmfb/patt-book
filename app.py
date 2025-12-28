@@ -219,6 +219,7 @@ def index():
     customers = db.execute(
         'SELECT id, name, phone, address FROM customers ORDER BY name'
     ).fetchall()
+    db.close()
     return render_template('index.html', customers=customers)
 
 
@@ -255,6 +256,7 @@ def add_customer():
                 # Validate due_days - must be one of the allowed options
                 allowed_due_days = [7, 10, 14, 21, 25, 30, 45, 60]
                 if due_days_int not in allowed_due_days:
+                    db.close()
                     flash('Please select a valid due days option!', 'error')
                     return render_template('add_customer.html')
 
@@ -305,9 +307,11 @@ def add_customer():
                     # Don't fail customer creation if WhatsApp fails
                     print(f"Warning: Could not send welcome WhatsApp: {str(e)}")
             
+            db.close()
             flash('Customer added successfully!', 'success')
             return redirect(url_for('dashboard'))
         except sqlite3.IntegrityError:
+            db.close()
             flash('Error adding customer. Please try again.', 'error')
     
     return render_template('add_customer.html')
@@ -402,6 +406,7 @@ def view_customer(customer_id):
     total_payments = sum(t['amount'] for t in transactions if t['type'] == 'payment')
     outstanding_balance = max(0, total_credits - total_payments)
 
+    db.close()
     return render_template('view_customer.html',
                          customer=customer,
                          transactions=transactions,
@@ -435,6 +440,7 @@ def add_credit(customer_id=None):
                     'SELECT id, name FROM customers WHERE id = ?',
                     (request.form['customer_id'],)
                 ).fetchone()
+            db.close()
             return render_template('add_credit.html', customers=customers, selected_customer=selected_customer_obj)
         
         # Calculate due date automatically
@@ -528,8 +534,10 @@ def add_credit(customer_id=None):
                 'SELECT id, name FROM customers WHERE id = ?',
                 (customer_id,)
             ).fetchone()
+            db.close()
             return render_template('credit_success.html', customer=customer, amount=amount, due_date=due_date)
         except Exception as e:
+            db.close()
             flash(f'Error adding credit entry: {str(e)}', 'error')
     
     # GET request - show form
@@ -541,6 +549,7 @@ def add_credit(customer_id=None):
             (customer_id,)
         ).fetchone()
 
+    db.close()
     return render_template('add_credit.html', customers=customers, selected_customer=selected_customer)
 
 
@@ -933,6 +942,7 @@ def debtor_details():
     for debtor in debtor_list[:3]:  # Print first 3 for debugging
         print(f"  {debtor['customer_name']}: {debtor['outstanding_balance']:.2f}, due: {debtor['due_date']}, days: {debtor['days_until_due']}")
     
+    db.close()
     return render_template('debtor_details.html', 
                          debtor_list=debtor_list, 
                          sort_option=sort_option, 
