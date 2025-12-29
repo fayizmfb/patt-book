@@ -969,33 +969,23 @@ def debtor_details():
 @require_login
 def settings():
     """
-    Settings page for admin to configure default dunning days and app details
+    Settings page for store profile and basic configuration
     """
     db = get_db()
     
     if request.method == 'POST':
-        # Update settings from form
+        # Update only store and configuration settings
         default_dunning_days = request.form.get('default_dunning_days', '15')
-        app_name = request.form.get('app_name', 'Retail App')
-        app_description = request.form.get('app_description', '')
-        admin_email = request.form.get('admin_email', '')
-        admin_phone = request.form.get('admin_phone', '')
         store_name = request.form.get('store_name', 'Your Store')
-        whatsapp_api_url = request.form.get('whatsapp_api_url', '')
-        whatsapp_api_token = request.form.get('whatsapp_api_token', '')
-        whatsapp_phone_id = request.form.get('whatsapp_phone_id', '')
+        store_address = request.form.get('store_address', '')
+        store_email = request.form.get('store_email', '')
         
-        # Update each setting
+        # Update settings
         settings_to_update = [
             ('default_dunning_days', default_dunning_days),
-            ('app_name', app_name),
-            ('app_description', app_description),
-            ('admin_email', admin_email),
-            ('admin_phone', admin_phone),
             ('store_name', store_name),
-            ('whatsapp_api_url', whatsapp_api_url),
-            ('whatsapp_api_token', whatsapp_api_token),
-            ('whatsapp_phone_id', whatsapp_phone_id)
+            ('store_address', store_address),
+            ('store_email', store_email)
         ]
         
         try:
@@ -1018,7 +1008,11 @@ def settings():
             'description': row['description']
         }
     
-    return render_template('settings.html', settings=settings_data)
+    # Get login mobile number (read-only)
+    login_mobile = get_current_user_phone() or 'Not available'
+    
+    db.close()
+    return render_template('settings.html', settings=settings_data, login_mobile=login_mobile)
 
 
 # ============================================================================

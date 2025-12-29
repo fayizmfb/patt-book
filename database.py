@@ -100,6 +100,8 @@ def init_db():
             ('admin_email', '', 'Admin email address'),
             ('admin_phone', '', 'Admin phone number'),
             ('store_name', 'Your Store', 'Store name (used in WhatsApp messages)'),
+            ('store_address', '', 'Store address'),
+            ('store_email', '', 'Store email address'),
             ('whatsapp_api_url', '', 'WhatsApp Business API base URL'),
             ('whatsapp_api_token', '', 'WhatsApp Business API access token'),
             ('whatsapp_phone_id', '', 'WhatsApp Business Phone Number ID')
