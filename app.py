@@ -999,9 +999,10 @@ def settings():
         except Exception as e:
             flash(f'Error updating settings: {str(e)}', 'error')
     
-    # Get current settings
+    # Get current settings (only retailer-relevant settings)
     settings_data = {}
-    settings_rows = db.execute('SELECT key, value, description FROM settings').fetchall()
+    retailer_settings_keys = ['default_dunning_days', 'store_name', 'store_address', 'store_email']
+    settings_rows = db.execute('SELECT key, value, description FROM settings WHERE key IN (?, ?, ?, ?)', retailer_settings_keys).fetchall()
     for row in settings_rows:
         settings_data[row['key']] = {
             'value': row['value'],
