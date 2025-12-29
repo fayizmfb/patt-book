@@ -949,6 +949,24 @@ def debtor_details():
     elif sort_option == 'name_desc':
         debtor_list.sort(key=lambda x: x['customer_name'], reverse=True)
     
+    # Generate reminder messages for each debtor
+    store_name = db.execute("SELECT value FROM settings WHERE key = 'store_name'").fetchone()
+    store_name = store_name['value'] if store_name else 'Your Store'
+    
+    for debtor in debtor_list:
+        # Calculate days until due (positive for future, negative for overdue)
+        days_until_due = debtor['days_until_due']
+        
+        # Generate reminder message using the same format as automatic reminders
+        reminder_message = prepare_pre_due_reminder_message(
+            customer_name=debtor['customer_name'],
+            store_name=store_name,
+            outstanding_balance=debtor['outstanding_balance'],
+            due_date=debtor['due_date'],
+            days_until_due=days_until_due
+        )
+        debtor['reminder_message'] = reminder_message
+    
     # Debug: Print debtor list for verification
     print(f"DEBUG: Found {len(debtor_list)} debtors")
     for debtor in debtor_list[:3]:  # Print first 3 for debugging

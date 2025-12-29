@@ -177,6 +177,17 @@ def prepare_pre_due_reminder_message(customer_name, store_name, outstanding_bala
     else:
         due_date_str = str(due_date)
     
+    # Format the days information based on whether it's overdue or not
+    if days_until_due < 0:
+        days_info = f"Days Overdue: {abs(days_until_due)}"
+        urgency_text = "Your payment is overdue. Please settle your account as soon as possible."
+    elif days_until_due == 0:
+        days_info = "Due Date: Today"
+        urgency_text = "Your payment is due today. Please settle your account."
+    else:
+        days_info = f"Days Until Due: {days_until_due}"
+        urgency_text = "Please plan to settle your account by the due date."
+    
     message = f"""Hello {customer_name},
 
 This is a friendly reminder from {store_name}.
@@ -185,9 +196,9 @@ Payment Reminder:
 • Store: {store_name}
 • Outstanding Balance: {outstanding_balance:.2f}
 • Due Date: {due_date_str}
-• Days Until Due: {days_until_due}
+• {days_info}
 
-Please plan to settle your account by the due date.
+{urgency_text}
 
 IMPORTANT:
 • Patt Book does NOT collect payments

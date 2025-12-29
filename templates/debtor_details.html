@@ -135,9 +135,17 @@
                 <td>
                     <a href="{{ url_for('add_payment', customer_id=debtor['customer_id']) }}" 
                        class="btn btn-success btn-sm" 
-                       style="padding: 6px 12px; font-size: 12px;">
+                       style="padding: 6px 12px; font-size: 12px; margin-right: 5px;">
                         💰 Pay
                     </a>
+                    {% if debtor['phone'] %}
+                        <a href="https://wa.me/{{ debtor['phone'] }}?text={{ debtor['reminder_message']|urlencode }}" 
+                           target="_blank"
+                           class="btn btn-warning btn-sm" 
+                           style="padding: 6px 12px; font-size: 12px;">
+                            📱 Reminder
+                        </a>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
