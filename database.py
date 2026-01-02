@@ -35,8 +35,8 @@ def init_db():
                 customer_id INTEGER NOT NULL,
                 amount REAL NOT NULL,
                 entry_date DATE NOT NULL,
-                due_days INTEGER NOT NULL,
-                due_date DATE NOT NULL,
+                due_days INTEGER,
+                due_date DATE,
                 reminder_date DATE,
                 whatsapp_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -54,6 +54,59 @@ def init_db():
             conn.execute("ALTER TABLE credits ADD COLUMN whatsapp_message TEXT")
         except:
             pass  # Column might already exist
+        
+        # Migration: Make due_days and due_date nullable (for simplified reminder logic)
+        try:
+            # Check if due_days is still NOT NULL by attempting to insert a test row
+            # If it fails, we need to recreate the table
+            cursor = conn.execute("PRAGMA table_info(credits)")
+            columns = cursor.fetchall()
+            
+            # Find due_days column
+            due_days_not_null = False
+            due_date_not_null = False
+            for col in columns:
+                if col[1] == 'due_days' and col[3] == 1:  # col[3] is notnull
+                    due_days_not_null = True
+                if col[1] == 'due_date' and col[3] == 1:  # col[3] is notnull
+                    due_date_not_null = True
+            
+            # If either column is still NOT NULL, recreate the table
+            if due_days_not_null or due_date_not_null:
+                print("Migrating credits table to make due_days and due_date nullable...")
+                
+                # Create new table with updated schema
+                conn.execute("""
+                    CREATE TABLE credits_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        customer_id INTEGER NOT NULL,
+                        amount REAL NOT NULL,
+                        entry_date DATE NOT NULL,
+                        due_days INTEGER,
+                        due_date DATE,
+                        reminder_date DATE,
+                        whatsapp_message TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (customer_id) REFERENCES customers (id)
+                    )
+                """)
+                
+                # Copy data from old table to new table
+                conn.execute("""
+                    INSERT INTO credits_new 
+                    (id, customer_id, amount, entry_date, due_days, due_date, reminder_date, whatsapp_message, created_at)
+                    SELECT id, customer_id, amount, entry_date, due_days, due_date, reminder_date, whatsapp_message, created_at
+                    FROM credits
+                """)
+                
+                # Drop old table and rename new table
+                conn.execute("DROP TABLE credits")
+                conn.execute("ALTER TABLE credits_new RENAME TO credits")
+                
+                print("Migration completed successfully!")
+        
+        except Exception as e:
+            print(f"Migration check failed (this is normal for new databases): {e}")
         
         # Create payments table (Payment Entries)
         conn.execute("""
@@ -199,7 +252,6 @@ def init_db():
         
         # Create indexes for better query performance
         conn.execute("CREATE INDEX IF NOT EXISTS idx_credits_customer ON credits(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_credits_due_date ON credits(due_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_customer ON payments(customer_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at)")
