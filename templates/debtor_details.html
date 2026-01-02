@@ -12,32 +12,10 @@
         accent-color: #3498db;
     }
     
-    /* Balance and days overdue display - stacked vertically */
-    .balance-days-container {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 5px;
-    }
-    
     .outstanding-balance {
         font-weight: bold;
         color: #e74c3c;
         font-size: 16px;
-    }
-    
-    .days-overdue-text {
-        font-size: 13px;
-        color: #666;
-    }
-    
-    /* Overdue row styling */
-    .overdue-row {
-        background-color: #fff5f5;
-    }
-    
-    .overdue-row:hover {
-        background-color: #ffeaea;
     }
 </style>
 {% endblock %}
@@ -51,8 +29,6 @@
         <div>
             <label for="sort_select" style="margin-right: 10px; font-weight: 600;">Sort by:</label>
             <select id="sort_select" onchange="window.location.href='{{ url_for('debtor_details') }}?sort=' + this.value" style="padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-                <option value="due_asc" {% if sort_option == 'due_asc' %}selected{% endif %}>Due Date (Soonest First)</option>
-                <option value="due_desc" {% if sort_option == 'due_desc' %}selected{% endif %}>Due Date (Latest First)</option>
                 <option value="balance_desc" {% if sort_option == 'balance_desc' %}selected{% endif %}>Balance (High to Low)</option>
                 <option value="balance_asc" {% if sort_option == 'balance_asc' %}selected{% endif %}>Balance (Low to High)</option>
                 <option value="name_asc" {% if sort_option == 'name_asc' %}selected{% endif %}>Name (A-Z)</option>
@@ -62,8 +38,7 @@
     </div>
     
     <p style="color: #666; margin-bottom: 20px;">
-        Showing all customers with outstanding balances > 0 (as of {{ today }})
-        <br><small>Overdue accounts are highlighted in red</small>
+        Showing all customers with outstanding balances > 0
     </p>
     
     {% if debtor_list %}
@@ -76,15 +51,12 @@
                 <th>Customer Name</th>
                 <th>Phone</th>
                 <th class="text-right">Outstanding Balance</th>
-                <th>Due Date</th>
-                <th>Status</th>
-                <th>Ageing Bucket</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for debtor in debtor_list %}
-            <tr class="{% if debtor['status'] == 'overdue' %}overdue-row{% endif %}">
+            <tr>
                 <!-- Checkbox column: Optional selection for future actions -->
                 <td style="text-align: center;">
                     <input type="checkbox" 
@@ -97,9 +69,6 @@
                 <!-- Customer name column -->
                 <td>
                     <strong>{{ debtor['customer_name'] }}</strong>
-                    {% if debtor['overdue_count'] > 0 %}
-                        <br><small style="color: #e74c3c;">{{ debtor['overdue_count'] }} overdue credit(s)</small>
-                    {% endif %}
                 </td>
                 
                 <!-- Phone column -->
@@ -112,25 +81,6 @@
                     </div>
                 </td>
                 
-                <!-- Due date column -->
-                <td>{{ debtor['due_date'] }}</td>
-                
-                <!-- Status column -->
-                <td>
-                    {% if debtor['status'] == 'overdue' %}
-                        <span class="badge badge-danger">OVERDUE</span>
-                    {% else %}
-                        <span class="badge" style="background-color: #27ae60; color: white;">CURRENT</span>
-                    {% endif %}
-                </td>
-                
-                <!-- Ageing bucket column -->
-                <td>
-                    <span class="badge {% if debtor['status'] == 'overdue' %}badge-danger{% else %}badge-warning{% endif %}">
-                        {{ debtor['bucket'] }}
-                    </span>
-                </td>
-                
                 <!-- Actions column -->
                 <td>
                     <a href="{{ url_for('add_payment', customer_id=debtor['customer_id']) }}" 
@@ -138,6 +88,17 @@
                        style="padding: 6px 12px; font-size: 12px; margin-right: 5px;">
                         💰 Pay
                     </a>
+                    {% if debtor['phone'] %}
+                        <form method="POST" action="{{ url_for('send_manual_message', customer_id=debtor['customer_id']) }}" 
+                              style="display: inline;" 
+                              onsubmit="return confirm('Send reminder message to {{ debtor['customer_name'] }}?')">
+                            <button type="submit" 
+                                    class="btn btn-warning btn-sm" 
+                                    style="padding: 6px 12px; font-size: 12px;">
+                                📱 Send Message
+                            </button>
+                        </form>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

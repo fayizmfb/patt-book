@@ -113,3 +113,29 @@ Regards,
 
     return message
 
+
+def prepare_manual_reminder_message(customer_name, store_name, total_outstanding):
+    """
+    Prepare manual reminder message for outstanding balance
+
+    Args:
+        customer_name: Name of the customer
+        store_name: Name of the store from settings
+        total_outstanding: Current total outstanding balance
+
+    Returns:
+        str: Formatted manual reminder message
+    """
+    message = f"""Hello {customer_name},
+
+This is a friendly reminder from {store_name}.
+
+Your current outstanding balance is: ₹{total_outstanding:.2f}
+
+Please settle your account at your earliest convenience.
+
+Regards,
+{store_name} - Patt Book"""
+
+    return message
+

@@ -49,8 +49,6 @@
                 <th>Credit ID</th>
                 <th>Amount</th>
                 <th>Entry Date</th>
-                <th>Due Days</th>
-                <th>Due Date</th>
             </tr>
         </thead>
         <tbody>
@@ -59,8 +57,6 @@
                 <td>{{ credit['id'] }}</td>
                 <td class="text-right">{{ "%.2f"|format(credit['amount']) }}</td>
                 <td>{{ credit['entry_date'] }}</td>
-                <td>{{ credit['due_days'] }} days</td>
-                <td>{{ credit['due_date'] }}</td>
             </tr>
             {% endfor %}
         </tbody>

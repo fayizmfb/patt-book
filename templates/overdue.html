@@ -17,7 +17,6 @@
                 <th>Customer</th>
                 <th>Credit Amount</th>
                 <th>Entry Date</th>
-                <th>Due Date</th>
                 <th>Total Payments</th>
                 <th>Outstanding Balance</th>
                 <th>Days Overdue</th>
@@ -30,9 +29,6 @@
                 <td><strong>{{ item['customer_name'] }}</strong></td>
                 <td class="text-right">{{ "%.2f"|format(item['amount']) }}</td>
                 <td>{{ item['entry_date'] }}</td>
-                <td>
-                    <span class="badge badge-danger">{{ item['due_date'] }}</span>
-                </td>
                 <td class="text-right">{{ "%.2f"|format(item['total_payments']) }}</td>
                 <td class="text-right"><strong>{{ "%.2f"|format(item['outstanding_balance']) }}</strong></td>
                 <td>

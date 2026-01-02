@@ -207,14 +207,6 @@
     </style>
     {% block extra_css %}{% endblock %}
 
-    <!-- AiSensy WhatsApp Widget -->
-    <script
-      type="text/javascript"
-      src="https://d3mkw6s8thqya7.cloudfront.net/integration-plugin.js"
-      id="aisensy-wa-widget"
-      widget-id="aaat36">
-    </script>
-
 </head>
 <body>
     <header>
@@ -230,8 +222,6 @@
                 <li><a href="{{ url_for('index') }}">Customers</a></li>
                 <li><a href="{{ url_for('add_credit') }}">Add Credit</a></li>
                 <li><a href="{{ url_for('add_payment') }}">Add Payment</a></li>
-                <li><a href="{{ url_for('overdue_list') }}">Overdue</a></li>
-                <li><a href="{{ url_for('ageing_report') }}">Ageing Report</a></li>
             </ul>
         </div>
     </nav>
