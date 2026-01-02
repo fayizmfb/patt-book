@@ -1,15 +1,15 @@
 # Retail App - Core Accounting System
 
-A simple Flask-based accounting system for small retailers to manage customer credits and payments.
+A simple Flask-based accounting system for small retailers to manage customer credits and payments with immediate WhatsApp notifications.
 
 ## Features
 
 - **Customer Master**: Store customer information (name, phone, address)
-- **Credit Entry**: Record credits with automatic due date calculation (5-30 days)
+- **Credit Entry**: Record credits with immediate WhatsApp notification to customers
 - **Payment Entry**: Record payments with balance validation (prevents negative balances)
-- **Overdue Detection**: Identify overdue accounts where balance > 0 and due date < today
-- **Ageing Report**: Categorize outstanding balances by age buckets (0-30, 31-60, 61+ days)
+- **Debtor Management**: View customers with outstanding balances
 - **Customer Ledger**: View complete transaction history for each customer
+- **Manual Reminders**: Send follow-up WhatsApp messages from the Debtors section
 
 ## Installation
 
@@ -28,6 +28,25 @@ A simple Flask-based accounting system for small retailers to manage customer cr
 4. **Access the application**:
    Open your browser and navigate to: `http://localhost:5000`
 
+## WhatsApp Configuration
+
+The application integrates with WhatsApp Business API for customer notifications:
+
+1. **Configure API credentials** in Settings:
+   - WhatsApp API URL
+   - API Key/Token
+   - Store name (used in messages)
+
+2. **Message Triggers**:
+   - **Credit Entry**: Automatic notification when credit is recorded
+   - **Manual Follow-up**: Retailer-initiated from Debtor Details section
+
+3. **Message Content**:
+   - Store name and customer greeting
+   - Current transaction amount
+   - Total outstanding balance
+   - Professional, non-spam messaging
+
 ## Usage
 
 ### 1. Add Customers
@@ -39,8 +58,11 @@ A simple Flask-based accounting system for small retailers to manage customer cr
 - Click "Add Credit" in the navigation
 - Select a customer
 - Enter the credit amount
-- Enter due days (5-30 days)
-- The due date will be calculated automatically (entry date + due days)
+- The system automatically sends a WhatsApp message to the customer with:
+  - Store name
+  - Customer name
+  - Current purchase amount
+  - Total outstanding balance after the entry
 
 ### 3. Add Payment Entries
 - Click "Add Payment" in the navigation
@@ -48,19 +70,12 @@ A simple Flask-based accounting system for small retailers to manage customer cr
 - Enter the payment amount
 - The system will prevent payments exceeding outstanding balance
 
-### 4. View Overdue Entries
-- Click "Overdue" in the navigation
-- View all credits where balance > 0 and due date < today
-- See how many days overdue each entry is
+### 4. View Debtor Details
+- Click "Debtor Details" in the navigation (or from Dashboard)
+- View all customers with outstanding balances
+- Send manual follow-up WhatsApp reminders using the "Send Message" button
 
-### 5. View Ageing Report
-- Click "Ageing Report" in the navigation
-- See outstanding balances grouped by age buckets:
-  - 0-30 days
-  - 31-60 days
-  - 61+ days
-
-### 6. View Customer Ledger
+### 5. View Customer Ledger
 - From the customer list, click "Ledger" next to any customer
 - View all credit and payment entries
 - See total credits, total payments, and outstanding balance
@@ -72,8 +87,10 @@ The application uses SQLite database (`retail_app.db`) which is automatically cr
 ### Database Schema
 
 - **customers**: Customer master data (id, name, phone, address)
-- **credits**: Credit entries (id, customer_id, amount, entry_date, due_days, due_date)
+- **credits**: Credit entries (id, customer_id, amount, entry_date, due_days*, due_date*)
 - **payments**: Payment entries (id, customer_id, amount, payment_date)
+
+*Note: `due_days` and `due_date` columns are maintained for backward compatibility but are no longer used in the simplified workflow.
 
 ## Code Structure
 
@@ -82,6 +99,7 @@ The application uses SQLite database (`retail_app.db`) which is automatically cr
 ├── app.py              # Main Flask application with all routes
 ├── database.py         # Database initialization and connection management
 ├── models.py           # Data models and helper functions
+├── whatsapp_helper.py  # WhatsApp API integration functions
 ├── requirements.txt    # Python dependencies
 ├── retail_app.db      # SQLite database (created automatically)
 └── templates/         # HTML templates
@@ -91,8 +109,7 @@ The application uses SQLite database (`retail_app.db`) which is automatically cr
     ├── view_customer.html
     ├── add_credit.html
     ├── add_payment.html
-    ├── overdue.html
-    ├── ageing.html
+    ├── debtor_details.html
     └── ledger.html
 ```
 
@@ -101,10 +118,9 @@ The application uses SQLite database (`retail_app.db`) which is automatically cr
 ### app.py - Main Application
 Contains all Flask routes and business logic:
 - **Customer routes**: List, view, and add customers
-- **Credit routes**: Add credit entries with auto-calculated due dates
+- **Credit routes**: Add credit entries with automatic WhatsApp notifications
 - **Payment routes**: Add payments with balance validation
-- **Overdue route**: Query credits where due_date < today and balance > 0
-- **Ageing route**: Group outstanding balances by age buckets
+- **Debtor routes**: Show customers with outstanding balances and manual reminder functionality
 - **Ledger route**: Show all transactions for a customer
 
 ### database.py - Database Management
@@ -114,9 +130,13 @@ Contains all Flask routes and business logic:
 
 ### models.py - Helper Functions
 Contains utility functions:
-- **calculate_due_date()**: Calculates due date from entry date and due days
 - **get_customer_balance()**: Calculates outstanding balance for a customer
-- **get_overdue_credits()**: Retrieves overdue credits (alternative implementation)
+
+### whatsapp_helper.py - WhatsApp Integration
+Contains WhatsApp Business API functions:
+- **send_whatsapp_message()**: Sends messages via WhatsApp API
+- **prepare_credit_entry_message()**: Creates notification message for new credit entries
+- **prepare_manual_reminder_message()**: Creates follow-up reminder messages
 
 ## Notes
 
@@ -125,6 +145,9 @@ Contains utility functions:
 - Database is automatically initialized on first run
 - All amounts are stored as REAL (float) in SQLite
 - Dates are stored as DATE type in SQLite
+- WhatsApp notifications are sent only on credit entries and manual follow-ups
+- No automatic scheduling or due-date based reminders
+- Retailers have full manual control over follow-up messaging
 
 ## License
 
