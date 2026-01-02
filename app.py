@@ -6,7 +6,7 @@ A simple Flask application for managing customer credits and payments
 from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, make_response
 from datetime import datetime, timedelta
 from database import init_db, get_db
-from whatsapp_helper import send_whatsapp_message, prepare_welcome_message, prepare_credit_confirmation_message, prepare_pre_due_reminder_message
+from whatsapp_helper import send_whatsapp_message, prepare_credit_entry_message
 from firebase_config import (
     get_user_store_data, save_user_store_data,
     is_user_logged_in, get_current_user_id, get_current_user_phone
@@ -286,42 +286,7 @@ def add_customer():
                 
                 print(f"DEBUG: Credit entry added for customer {customer_id}: amount={amount}, due_date={due_date}")
                 
-                # Send immediate credit confirmation message for initial debit
-                if phone:
-                    try:
-                        # Get store name from settings
-                        store_setting = db.execute(
-                            "SELECT value FROM settings WHERE key = 'store_name'"
-                        ).fetchone()
-                        store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
-                        
-                        # Prepare and send credit confirmation message
-                        confirmation_msg = prepare_credit_confirmation_message(
-                            name,
-                            store_name,
-                            amount,
-                            due_date
-                        )
-                        send_whatsapp_message(phone, confirmation_msg)
-                    except Exception as e:
-                        # Don't fail customer creation if WhatsApp fails
-                        print(f"Warning: Could not send initial credit confirmation WhatsApp: {str(e)}")
-            
-            # Send welcome WhatsApp message if phone number is provided
-            if phone:
-                try:
-                    # Get store name from settings
-                    store_setting = db.execute(
-                        "SELECT value FROM settings WHERE key = 'store_name'"
-                    ).fetchone()
-                    store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
-                    
-                    # Prepare and send welcome message
-                    welcome_msg = prepare_welcome_message(name, store_name)
-                    send_whatsapp_message(phone, welcome_msg)
-                except Exception as e:
-                    # Don't fail customer creation if WhatsApp fails
-                    print(f"Warning: Could not send welcome WhatsApp: {str(e)}")
+                # Note: WhatsApp message will be sent when credit is added via the credit entry form
             
             db.close()
             print(f"DEBUG: Customer creation completed successfully for: {name}")
@@ -408,46 +373,11 @@ def add_credit(customer_id=None):
         entry_date = datetime.now().date()
         due_date = entry_date + timedelta(days=due_days)
         
-        # Calculate reminder date (days before due date)
-        reminder_days_before = int(db.execute(
-            "SELECT value FROM settings WHERE key = 'reminder_days_before_due'"
-        ).fetchone()['value'])
-        reminder_date = due_date - timedelta(days=reminder_days_before)
-        
-        # Prepare WhatsApp reminder message
-        customer = db.execute(
-            'SELECT name, phone FROM customers WHERE id = ?',
-            (customer_id,)
-        ).fetchone()
-        
-        store_setting = db.execute(
-            "SELECT value FROM settings WHERE key = 'store_name'"
-        ).fetchone()
-        store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
-        
-        # Calculate outstanding balance for the message
-        total_credits = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
-            (customer_id, 'DEBIT')
-        ).fetchone()[0]
-        total_payments = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
-            (customer_id, 'PAYMENT')
-        ).fetchone()[0]
-        outstanding_balance = total_credits - total_payments
-        
-        whatsapp_message = prepare_pre_due_reminder_message(
-            customer['name'],
-            store_name,
-            outstanding_balance,
-            due_date,
-            reminder_days_before
-        )
-        
         try:
+            # Insert credit entry
             db.execute(
-                'INSERT INTO credits (customer_id, amount, entry_date, due_days, due_date, reminder_date, whatsapp_message) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                (customer_id, amount, entry_date, due_days, due_date, reminder_date, whatsapp_message)
+                'INSERT INTO credits (customer_id, amount, entry_date, due_days, due_date) VALUES (?, ?, ?, ?, ?)',
+                (customer_id, amount, entry_date, due_days, due_date)
             )
             db.commit()
             
@@ -458,7 +388,7 @@ def add_credit(customer_id=None):
             )
             db.commit()
             
-            # Send immediate credit confirmation message
+            # Send WhatsApp message for credit entry
             try:
                 # Get customer details
                 customer = db.execute(
@@ -473,64 +403,28 @@ def add_credit(customer_id=None):
                     ).fetchone()
                     store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
                     
-                    # Prepare and send credit confirmation message
-                    confirmation_msg = prepare_credit_confirmation_message(
+                    # Calculate total outstanding balance after this entry
+                    total_credits = db.execute(
+                        'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
+                        (customer_id, 'DEBIT')
+                    ).fetchone()[0]
+                    total_payments = db.execute(
+                        'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
+                        (customer_id, 'PAYMENT')
+                    ).fetchone()[0]
+                    total_outstanding = max(0, total_credits - total_payments)
+                    
+                    # Prepare and send credit entry message
+                    credit_msg = prepare_credit_entry_message(
                         customer['name'],
                         store_name,
                         amount,
-                        due_date
+                        total_outstanding
                     )
-                    send_whatsapp_message(customer['phone'], confirmation_msg)
+                    send_whatsapp_message(customer['phone'], credit_msg)
             except Exception as e:
                 # Don't fail credit entry if WhatsApp fails
-                print(f"Warning: Could not send credit confirmation WhatsApp: {str(e)}")
-            
-            # Check if due date is today or has passed, and send reminder if needed
-            # This will send reminder immediately if due date equals today or is in the past
-            today = datetime.now().date()
-            if due_date <= today:
-                try:
-                    # Get customer details
-                    customer = db.execute(
-                        'SELECT name, phone FROM customers WHERE id = ?',
-                        (customer_id,)
-                    ).fetchone()
-                    
-                    if customer and customer['phone']:
-                        # Calculate outstanding balance
-                        total_debits = db.execute(
-                            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
-                            (customer_id, 'DEBIT')
-                        ).fetchone()[0]
-                        total_payments = db.execute(
-                            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
-                            (customer_id, 'PAYMENT')
-                        ).fetchone()[0]
-                        outstanding_balance = total_debits - total_payments
-                        
-                        # Only send if balance > 0
-                        if outstanding_balance > 0:
-                            # Get store name from settings
-                            store_setting = db.execute(
-                                "SELECT value FROM settings WHERE key = 'store_name'"
-                            ).fetchone()
-                            store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
-                            
-                            # Calculate days overdue (0 if due today, >0 if past due)
-                            days_overdue = (today - due_date).days
-                            
-                            # Prepare and send reminder message with days overdue
-                            reminder_msg = prepare_reminder_message(
-                                customer['name'],
-                                store_name,
-                                outstanding_balance,
-                                due_date,
-                                days_overdue
-                            )
-                            send_whatsapp_message(customer['phone'], reminder_msg)
-                except Exception as e:
-                    # Don't fail credit entry if WhatsApp fails
-                    print(f"Warning: Could not send reminder WhatsApp: {str(e)}")
+                print(f"Warning: Could not send credit entry WhatsApp: {str(e)}")
             
             flash(f'Credit entry added successfully! Due date: {due_date}', 'success')
             # Instead of redirecting, show success page with action buttons
@@ -949,24 +843,6 @@ def debtor_details():
     elif sort_option == 'name_desc':
         debtor_list.sort(key=lambda x: x['customer_name'], reverse=True)
     
-    # Generate reminder messages for each debtor
-    store_name = db.execute("SELECT value FROM settings WHERE key = 'store_name'").fetchone()
-    store_name = store_name['value'] if store_name else 'Your Store'
-    
-    for debtor in debtor_list:
-        # Calculate days until due (positive for future, negative for overdue)
-        days_until_due = debtor['days_until_due']
-        
-        # Generate reminder message using the same format as automatic reminders
-        reminder_message = prepare_pre_due_reminder_message(
-            customer_name=debtor['customer_name'],
-            store_name=store_name,
-            outstanding_balance=debtor['outstanding_balance'],
-            due_date=debtor['due_date'],
-            days_until_due=days_until_due
-        )
-        debtor['reminder_message'] = reminder_message
-    
     # Debug: Print debtor list for verification
     print(f"DEBUG: Found {len(debtor_list)} debtors")
     for debtor in debtor_list[:3]:  # Print first 3 for debugging
@@ -1100,52 +976,6 @@ def admin_dashboard():
     """Master admin dashboard with overall metrics"""
     stats = get_retailer_stats()
     return render_template('admin_dashboard.html', stats=stats)
-
-
-@app.route('/admin/reminders')
-@require_admin
-def admin_reminders():
-    """Show pending payment reminders that need to be sent"""
-    db = get_db()
-    today = datetime.now().date()
-    
-    # Get all credits where reminder_date is today or in the past, and customer has outstanding balance
-    reminders = db.execute("""
-        SELECT 
-            c.id as credit_id,
-            c.customer_id,
-            cust.name as customer_name,
-            cust.phone,
-            c.amount as credit_amount,
-            c.due_date,
-            c.reminder_date,
-            c.whatsapp_message,
-            (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = c.customer_id AND type = 'DEBIT') as total_debits,
-            (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = c.customer_id AND type = 'PAYMENT') as total_payments
-        FROM credits c
-        JOIN customers cust ON c.customer_id = cust.id
-        WHERE c.reminder_date <= ?
-        ORDER BY c.reminder_date ASC, cust.name ASC
-    """, (today,)).fetchall()
-    
-    # Filter to only show reminders where customer still has outstanding balance
-    pending_reminders = []
-    for reminder in reminders:
-        outstanding_balance = reminder['total_debits'] - reminder['total_payments']
-        if outstanding_balance > 0:
-            pending_reminders.append({
-                'credit_id': reminder['credit_id'],
-                'customer_id': reminder['customer_id'],
-                'customer_name': reminder['customer_name'],
-                'phone': reminder['phone'],
-                'outstanding_balance': outstanding_balance,
-                'due_date': reminder['due_date'],
-                'reminder_date': reminder['reminder_date'],
-                'whatsapp_message': reminder['whatsapp_message']
-            })
-    
-    db.close()
-    return render_template('admin_reminders.html', reminders=pending_reminders, today=today)
 
 
 @app.route('/admin/retailers')

@@ -94,7 +94,6 @@ def init_db():
         # Insert default settings if they don't exist
         default_settings = [
             ('default_dunning_days', '15', 'Default number of days from entry date until payment is due'),
-            ('reminder_days_before_due', '3', 'Number of days before due date to send reminder'),
             ('app_name', 'Retail App', 'Application name'),
             ('app_description', 'Simple accounting system for small retailers', 'Application description'),
             ('admin_email', '', 'Admin email address'),

@@ -138,14 +138,6 @@
                        style="padding: 6px 12px; font-size: 12px; margin-right: 5px;">
                         💰 Pay
                     </a>
-                    {% if debtor['phone'] %}
-                        <a href="https://wa.me/{{ debtor['phone'] }}?text={{ debtor['reminder_message']|urlencode }}" 
-                           target="_blank"
-                           class="btn btn-warning btn-sm" 
-                           style="padding: 6px 12px; font-size: 12px;">
-                            📱 Send Message
-                        </a>
-                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
