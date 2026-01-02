@@ -18,19 +18,11 @@ FIREBASE_CONFIG = {
     "databaseURL": os.getenv("FIREBASE_DATABASE_URL", "")  # Optional, for Realtime Database
 }
 
-# Initialize Firebase (only if pyrebase is available)
-try:
-    import pyrebase
-    firebase = pyrebase.initialize_app(FIREBASE_CONFIG)
-    auth = firebase.auth()
-    db = firebase.database()  # Using Realtime Database for simplicity
-    FIREBASE_AVAILABLE = True
-except ImportError:
-    # Firebase not installed - using simplified mode
-    FIREBASE_AVAILABLE = False
-    auth = None
-    db = None
-    print("Warning: Pyrebase not installed. Using simplified authentication mode.")
+# Initialize Firebase (disabled for compatibility - using simplified authentication mode)
+FIREBASE_AVAILABLE = False
+auth = None
+db = None
+print("Using simplified authentication mode (Firebase disabled for Python 3.14 compatibility).")
 
 
 def verify_phone_otp(phone_number, verification_code):
