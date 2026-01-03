@@ -593,6 +593,12 @@ def view_customer(customer_id):
 
 def add_credit(customer_id=None):
     """Add a credit entry for a customer"""
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    if session.get('user_type') != 'retailer':
+        flash('Access denied. Only retailers can add credits.', 'error')
+        return redirect(url_for('dashboard'))
+    
     db = get_db()
     retailer_id = session['user_id']
     
@@ -670,11 +676,26 @@ def add_credit(customer_id=None):
 
 def add_payment(customer_id=None):
     """Add a payment entry that reduces outstanding balance (requires login)"""
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    
     db = get_db()
     
     if request.method == 'POST':
-        customer_id = request.form['customer_id']
-        amount = float(request.form['amount'])
+        try:
+            customer_id = int(request.form['customer_id'])
+            amount = float(request.form['amount'])
+        except (ValueError, KeyError) as e:
+            flash('Invalid form data. Please check your input.', 'error')
+            customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+            return render_template('add_payment.html', customers=customers)
+        
+        # Validate customer exists
+        customer = db.execute('SELECT id, name FROM customers WHERE id = ?', (customer_id,)).fetchone()
+        if not customer:
+            flash('Selected customer not found.', 'error')
+            customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+            return render_template('add_payment.html', customers=customers)
         
         # Calculate current outstanding balance
         total_debits = db.execute(
@@ -718,18 +739,24 @@ def add_payment(customer_id=None):
             ).fetchone()
             return render_template('payment_success.html', customer=customer, amount=amount)
         except Exception as e:
+            db.rollback()
             flash(f'Error adding payment: {str(e)}', 'error')
+        finally:
+            db.close()
     
     # GET request - show form
-    customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
-    selected_customer = None
-    if customer_id:
-        selected_customer = db.execute(
-            'SELECT id, name FROM customers WHERE id = ?',
-            (customer_id,)
-        ).fetchone()
+    try:
+        customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+        selected_customer = None
+        if customer_id:
+            selected_customer = db.execute(
+                'SELECT id, name FROM customers WHERE id = ?',
+                (customer_id,)
+            ).fetchone()
 
-    return render_template('add_payment.html', customers=customers, selected_customer=selected_customer)
+        return render_template('add_payment.html', customers=customers, selected_customer=selected_customer)
+    finally:
+        db.close()
 
 
 # ============================================================================
@@ -870,6 +897,9 @@ def settings():
     """
     Settings page for store profile and basic configuration
     """
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    
     db = get_db()
     
     if request.method == 'POST':
@@ -957,19 +987,25 @@ def send_manual_message(customer_id):
         ).fetchone()
         store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
         
-        # Prepare and send manual reminder message (same as credit entry message)
-        from whatsapp_helper import prepare_credit_entry_message, send_whatsapp_message
-        reminder_msg = prepare_credit_entry_message(
-            customer['name'],
+        # Prepare and send manual reminder message via push notification
+        from push_notifications import send_push_notification, prepare_credit_notification
+        
+        title, body = prepare_credit_notification(
             store_name,
             0,  # No current purchase amount for manual message
             total_outstanding
         )
         
-        if send_whatsapp_message(customer['phone'], reminder_msg):
+        # Send push notification to customer (assuming customer is also a user in the users table)
+        customer_user = db.execute(
+            'SELECT id FROM users WHERE phone_number = ? AND user_type = ?',
+            (customer['phone'], 'customer')
+        ).fetchone()
+        
+        if customer_user and send_push_notification(customer_user['id'], title, body):
             flash(f'Manual reminder sent to {customer["name"]}!', 'success')
         else:
-            flash('Failed to send message. Please check WhatsApp settings.', 'error')
+            flash('Failed to send notification. Customer may not have push notifications enabled.', 'error')
             
     except Exception as e:
         print(f"Error sending manual message: {str(e)}")

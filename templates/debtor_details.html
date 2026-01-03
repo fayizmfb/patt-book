@@ -91,11 +91,11 @@
                     {% if debtor['phone'] %}
                         <form method="POST" action="{{ url_for('send_manual_message', customer_id=debtor['customer_id']) }}" 
                               style="display: inline;" 
-                              onsubmit="return confirm('Send reminder message to {{ debtor['customer_name'] }}?')">
+                              onsubmit="return confirm('Send push notification reminder to {{ debtor['customer_name'] }}?')">
                             <button type="submit" 
                                     class="btn btn-warning btn-sm" 
                                     style="padding: 6px 12px; font-size: 12px;">
-                                📱 Send Message
+                                📱 Send Notification
                             </button>
                         </form>
                     {% endif %}
