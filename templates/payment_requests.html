@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Requests - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Payment Requests</h2>
+    <p style="color: #666; margin-bottom: 30px;">
+        Customers have submitted payment requests. Review and confirm payments.
+    </p>
+
+    {% if requests %}
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Payment Mode</th>
+                    <th>Notes</th>
+                    <th>Submitted</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in requests %}
+                <tr>
+                    <td>
+                        <strong>{{ req['customer_name'] }}</strong><br>
+                        <small style="color: #666;">{{ req['customer_phone'] }}</small>
+                    </td>
+                    <td class="text-right">
+                        <strong>₹{{ "%.2f"|format(req['amount']) }}</strong>
+                    </td>
+                    <td>{{ req['payment_mode'].title() }}</td>
+                    <td>{{ req['notes'] or '-' }}</td>
+                    <td>{{ req['submitted_at'][:16] }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('process_payment_request', request_id=req['id'], action='confirm') }}"
+                              style="display: inline;"
+                              onsubmit="return confirm('Confirm payment of ₹{{ "%.2f"|format(req["amount"]) }} from {{ req["customer_name"] }}?')">
+                            <button type="submit" class="btn btn-success btn-sm">✅ Confirm</button>
+                        </form>
+
+                        <button type="button" class="btn btn-danger btn-sm"
+                                onclick="rejectPayment({{ req['id'] }}, '{{ req["customer_name"] }}', {{ req['amount'] }})">
+                            ❌ Reject
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 60px 20px; color: #666;">
+        <p>No pending payment requests.</p>
+        <p style="margin-top: 10px;">When customers submit payment requests, they'll appear here.</p>
+    </div>
+    {% endif %}
+
+    <!-- Hidden reject form -->
+    <div id="rejectModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 400px; width: 90%;">
+            <h3>Reject Payment Request</h3>
+            <form id="rejectForm" method="POST">
+                <div class="form-group">
+                    <label for="rejection_reason">Reason for rejection:</label>
+                    <textarea id="rejection_reason" name="rejection_reason" rows="3" required
+                              placeholder="Please provide a reason for rejecting this payment request"></textarea>
+                </div>
+                <div class="actions">
+                    <button type="submit" class="btn btn-danger">Reject Payment</button>
+                    <button type="button" class="btn" onclick="closeRejectModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="actions" style="margin-top: 30px;">
+        <a href="{{ url_for('retailer_dashboard') }}" class="btn">Back to Dashboard</a>
+    </div>
+</div>
+
+<script>
+function rejectPayment(requestId, customerName, amount) {
+    document.getElementById('rejectForm').action = `/retailer/payment-request/${requestId}/reject`;
+    document.getElementById('rejectModal').style.display = 'block';
+
+    // Focus on textarea
+    setTimeout(() => {
+        document.getElementById('rejection_reason').focus();
+    }, 100);
+}
+
+function closeRejectModal() {
+    document.getElementById('rejectModal').style.display = 'none';
+    document.getElementById('rejectForm').reset();
+}
+
+// Close modal when clicking outside
+document.getElementById('rejectModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeRejectModal();
+    }
+});
+</script>
+{% endblock %}

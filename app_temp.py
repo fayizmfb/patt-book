@@ -283,12 +283,6 @@ def retailer_dashboard():
     """
     Retailer dashboard - shows customers, recent activity, etc.
     """
-    if not is_user_logged_in():
-        return redirect(url_for('login'))
-    if session.get('user_type') != 'retailer':
-        flash('Access denied', 'error')
-        return redirect(url_for('login'))
-    
     db = get_db()
     retailer_id = session['user_id']
 
@@ -352,12 +346,6 @@ def customer_dashboard():
     """
     Customer dashboard - shows outstanding amounts per retailer
     """
-    if not is_user_logged_in():
-        return redirect(url_for('login'))
-    if session.get('user_type') != 'customer':
-        flash('Access denied', 'error')
-        return redirect(url_for('login'))
-    
     db = get_db()
     customer_id = session['user_id']
 

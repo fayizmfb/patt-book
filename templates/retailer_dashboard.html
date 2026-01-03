@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <div>
+            <h2>Welcome back, {{ retailer['store_name'] }}!</h2>
+            <p style="color: #666; margin: 5px 0 0 0;">Manage your customer credits and payments</p>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 14px; color: #666;">Phone: {{ retailer['phone_number'] }}</div>
+            {% if retailer['store_photo_url'] %}
+            <img src="{{ retailer['store_photo_url'] }}" alt="Store Photo" style="width: 60px; height: 60px; border-radius: 50%; margin-top: 10px; object-fit: cover;">
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+        <div class="metric-card">
+            <div class="metric-value">{{ customer_count }}</div>
+            <div class="metric-label">Total Customers</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value">₹{{ "%.0f"|format(total_outstanding) }}</div>
+            <div class="metric-label">Total Outstanding</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value">{{ pending_requests }}</div>
+            <div class="metric-label">Pending Payments</div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <h3>Quick Actions</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 30px;">
+        <a href="{{ url_for('add_customer') }}" class="btn btn-primary" style="text-align: center; padding: 15px;">
+            ➕ Add Customer
+        </a>
+        <a href="{{ url_for('add_credit') }}" class="btn btn-success" style="text-align: center; padding: 15px;">
+            💰 Add Credit
+        </a>
+        <a href="{{ url_for('retailer_customers') }}" class="btn btn-info" style="text-align: center; padding: 15px;">
+            👥 View Customers
+        </a>
+        <a href="{{ url_for('payment_requests') }}" class="btn btn-warning" style="text-align: center; padding: 15px;">
+            💳 Payment Requests
+        </a>
+    </div>
+
+    <!-- Recent Activity -->
+    {% if recent_credits %}
+    <h3>Recent Credit Entries</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for credit in recent_credits %}
+            <tr>
+                <td>{{ credit['customer_name'] }}</td>
+                <td class="text-right">₹{{ "%.2f"|format(credit['amount']) }}</td>
+                <td>{{ credit['entry_date'] }}</td>
+                <td>{{ credit['notes'] or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 40px; color: #666;">
+        <p>No credit entries yet. Start by adding your first customer!</p>
+        <a href="{{ url_for('add_customer') }}" class="btn btn-primary">Add First Customer</a>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.metric-card {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #e9ecef;
+}
+
+.metric-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 5px;
+}
+
+.metric-label {
+    font-size: 14px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Retailer Setup - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 50px auto;">
+    <h2>Setup Your Store</h2>
+    <p style="color: #666; margin-bottom: 30px;">
+        Tell us about your business to get started with Patt Book
+    </p>
+
+    <form method="POST" action="{{ url_for('retailer_onboarding') }}">
+        <!-- Store Name -->
+        <div class="form-group">
+            <label for="store_name">Store/Shop Name *</label>
+            <input type="text"
+                   id="store_name"
+                   name="store_name"
+                   placeholder="e.g., MFB General Store"
+                   required>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                This name will be visible to your customers
+            </small>
+        </div>
+
+        <!-- Store Address -->
+        <div class="form-group">
+            <label for="store_address">Store Address</label>
+            <textarea id="store_address"
+                      name="store_address"
+                      placeholder="Street address, city, state, pincode"
+                      rows="3"></textarea>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Optional: Helps customers locate your store
+            </small>
+        </div>
+
+        <!-- Store Photo URL -->
+        <div class="form-group">
+            <label for="store_photo">Store Photo URL</label>
+            <input type="url"
+                   id="store_photo"
+                   name="store_photo"
+                   placeholder="https://example.com/store-photo.jpg">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Optional: URL to your store's photo (will be used as profile picture)
+            </small>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Create Store Profile</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

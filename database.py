@@ -204,15 +204,95 @@ def init_db():
             )
         """)
         
-        # Create announcements table (Admin communications to retailers)
+        # Create users table (Unified user management for retailers and customers)
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS announcements (
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                message TEXT NOT NULL,
-                created_by TEXT,
+                phone_number TEXT UNIQUE NOT NULL,
+                user_type TEXT NOT NULL CHECK (user_type IN ('retailer', 'customer')),
+                name TEXT NOT NULL,
+                profile_photo_url TEXT,
+                address TEXT,
+                is_active BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'active'
+                last_login TIMESTAMP,
+                fcm_token TEXT  -- Firebase Cloud Messaging token for push notifications
+            )
+        """)
+        
+        # Create retailer_profiles table (Extended retailer information)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS retailer_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                store_name TEXT NOT NULL,
+                store_address TEXT,
+                store_photo_url TEXT,
+                business_type TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        """)
+        
+        # Modify credits table to include notes and link to retailer
+        try:
+            conn.execute("ALTER TABLE credits ADD COLUMN retailer_id INTEGER REFERENCES users(id)")
+        except:
+            pass
+        
+        try:
+            conn.execute("ALTER TABLE credits ADD COLUMN notes TEXT")
+        except:
+            pass
+        
+        # Create payment_requests table (Customer payment submissions)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS payment_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                retailer_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                payment_mode TEXT NOT NULL, -- 'cash', 'upi', 'bank_transfer'
+                notes TEXT,
+                status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'rejected')),
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                processed_at TIMESTAMP,
+                processed_by INTEGER, -- retailer user_id who processed it
+                rejection_reason TEXT,
+                FOREIGN KEY (customer_id) REFERENCES users (id),
+                FOREIGN KEY (retailer_id) REFERENCES users (id),
+                FOREIGN KEY (processed_by) REFERENCES users (id)
+            )
+        """)
+        
+        # Create timeline_events table (Structured events for audit trail)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS timeline_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL,
+                retailer_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL CHECK (event_type IN ('credit_added', 'payment_requested', 'payment_confirmed', 'payment_rejected')),
+                amount REAL,
+                description TEXT,
+                metadata TEXT, -- JSON string for additional data
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (customer_id) REFERENCES users (id),
+                FOREIGN KEY (retailer_id) REFERENCES users (id)
+            )
+        """)
+        
+        # Create push_notifications table (Sent notification history)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS push_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                data TEXT, -- JSON string for additional data
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'sent' CHECK (status IN ('sent', 'delivered', 'failed')),
+                FOREIGN KEY (user_id) REFERENCES users (id)
             )
         """)
         
@@ -232,6 +312,7 @@ def init_db():
             ('global_dunning_days', '15', 'Global default dunning days for all retailers'),
             ('disclaimer_text', 'Patt Book does NOT collect payments. Do NOT make payments through any links.', 'Default disclaimer text'),
             ('whatsapp_enabled', 'true', 'Enable/disable WhatsApp messaging globally'),
+            ('fcm_server_key', '', 'Firebase Cloud Messaging server key for push notifications'),
             ('app_maintenance_mode', 'false', 'Maintenance mode for the entire app')
         ]
         
@@ -259,6 +340,14 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_retailers_status ON retailers(status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_admin ON audit_logs(admin_user)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_type ON users(user_type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_customer ON payment_requests(customer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_retailer ON payment_requests(retailer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_timeline_customer ON timeline_events(customer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_timeline_retailer ON timeline_events(retailer_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_timeline_created ON timeline_events(created_at)")
         
         conn.commit()
     finally:

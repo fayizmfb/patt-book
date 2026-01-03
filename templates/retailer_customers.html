@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}My Customers - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2>My Customers</h2>
+        <a href="{{ url_for('add_customer') }}" class="btn btn-success">➕ Add Customer</a>
+    </div>
+
+    {% if customers %}
+    <table>
+        <thead>
+            <tr>
+                <th>Customer Name</th>
+                <th>Phone</th>
+                <th class="text-right">Outstanding Balance</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for customer in customers %}
+            <tr>
+                <td><strong>{{ customer['name'] }}</strong></td>
+                <td>{{ customer['phone'] or 'N/A' }}</td>
+                <td class="text-right">
+                    <span style="color: {% if customer['outstanding'] > 0 %}#e74c3c{% else %}#27ae60{% endif %}">
+                        ₹{{ "%.2f"|format(customer['outstanding']) }}
+                    </span>
+                </td>
+                <td>
+                    <a href="{{ url_for('add_credit', customer_id=customer['id']) }}" class="btn btn-success btn-sm">
+                        💰 Add Credit
+                    </a>
+                    <a href="{{ url_for('customer_timeline', customer_id=customer['id']) }}" class="btn btn-info btn-sm">
+                        📋 View Details
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 60px 20px; color: #666;">
+        <p>No customers yet. Start by adding your first customer!</p>
+        <a href="{{ url_for('add_customer') }}" class="btn btn-primary">Add First Customer</a>
+    </div>
+    {% endif %}
+
+    <div class="actions" style="margin-top: 30px;">
+        <a href="{{ url_for('retailer_dashboard') }}" class="btn">Back to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

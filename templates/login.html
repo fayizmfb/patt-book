@@ -4,35 +4,44 @@
 
 {% block content %}
 <div class="card" style="max-width: 500px; margin: 50px auto;">
-    <h2>Login with Phone Number</h2>
+    <h2>Login to Patt Book</h2>
     <p style="color: #666; margin-bottom: 30px;">
-        Enter your phone number to receive an OTP code
+        Choose your account type and enter your phone number to receive an OTP code
     </p>
-    
+
     <form method="POST" action="{{ url_for('login') }}">
+        <!-- User Type Selection -->
+        <div class="form-group">
+            <label for="user_type">I am a:</label>
+            <select id="user_type" name="user_type" required {% if show_otp_input %}disabled{% endif %}>
+                <option value="retailer" {% if user_type == 'retailer' %}selected{% endif %}>Retailer/Shop Owner</option>
+                <option value="customer" {% if user_type == 'customer' %}selected{% endif %}>Customer</option>
+            </select>
+        </div>
+
         <!-- Phone Number Input -->
         <div class="form-group">
             <label for="phone_number">Phone Number *</label>
-            <input type="tel" 
-                   id="phone_number" 
-                   name="phone_number" 
+            <input type="tel"
+                   id="phone_number"
+                   name="phone_number"
                    value="{{ phone_number or '' }}"
-                   placeholder="+1234567890" 
+                   placeholder="+1234567890"
                    required
                    {% if show_otp_input %}readonly{% endif %}>
             <small style="color: #666; display: block; margin-top: 5px;">
                 Include country code (e.g., +1 for US, +91 for India)
             </small>
         </div>
-        
+
         <!-- OTP Input (shown after phone number is submitted) -->
         {% if show_otp_input %}
         <div class="form-group">
             <label for="verification_code">Verification Code *</label>
-            <input type="text" 
-                   id="verification_code" 
-                   name="verification_code" 
-                   placeholder="Enter 6-digit code" 
+            <input type="text"
+                   id="verification_code"
+                   name="verification_code"
+                   placeholder="Enter 6-digit code"
                    required
                    maxlength="6"
                    pattern="[0-9]{6}">
@@ -41,7 +50,7 @@
             </small>
         </div>
         {% endif %}
-        
+
         <div class="actions">
             <button type="submit" class="btn btn-success">
                 {% if show_otp_input %}Verify Code{% else %}Send OTP{% endif %}

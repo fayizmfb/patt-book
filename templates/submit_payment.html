@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Submit Payment - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Submit Payment Request</h2>
+    <p style="color: #666; margin-bottom: 30px;">
+        Let your retailer know you've made a payment outside the app
+    </p>
+
+    {% if retailers %}
+    <form method="POST" action="{{ url_for('submit_payment') }}">
+        <div class="form-group">
+            <label for="retailer_id">Select Retailer *</label>
+            <select id="retailer_id" name="retailer_id" required onchange="updateMaxAmount()">
+                <option value="">Choose a retailer</option>
+                {% for retailer in retailers %}
+                <option value="{{ retailer['retailer_id'] }}" data-max="{{ retailer['outstanding'] }}">
+                    {{ retailer['store_name'] }} (₹{{ "%.2f"|format(retailer['outstanding']) }} outstanding)
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="amount">Payment Amount *</label>
+            <input type="number" id="amount" name="amount" step="0.01" min="0.01" required>
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Amount you've paid to the retailer
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="payment_mode">Payment Mode *</label>
+            <select id="payment_mode" name="payment_mode" required>
+                <option value="">Select payment method</option>
+                <option value="cash">Cash</option>
+                <option value="upi">UPI (Google Pay, PhonePe, etc.)</option>
+                <option value="bank_transfer">Bank Transfer</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="notes">Notes (Optional)</label>
+            <textarea id="notes" name="notes" rows="3" placeholder="e.g., Paid via GPay today, Transaction ID: XXXX"></textarea>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Submit Payment Request</button>
+            <a href="{{ url_for('customer_dashboard') }}" class="btn">Cancel</a>
+        </div>
+    </form>
+
+    <script>
+    function updateMaxAmount() {
+        const select = document.getElementById('retailer_id');
+        const amountInput = document.getElementById('amount');
+        const selectedOption = select.options[select.selectedIndex];
+
+        if (selectedOption.value) {
+            const maxAmount = parseFloat(selectedOption.getAttribute('data-max'));
+            amountInput.max = maxAmount;
+            amountInput.placeholder = `Max: ₹${maxAmount.toFixed(2)}`;
+        } else {
+            amountInput.removeAttribute('max');
+            amountInput.placeholder = '';
+        }
+    }
+    </script>
+    {% else %}
+    <div style="text-align: center; padding: 60px 20px; color: #666;">
+        <p>You don't have any outstanding balances to pay.</p>
+        <a href="{{ url_for('customer_dashboard') }}" class="btn btn-primary">Back to Dashboard</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
