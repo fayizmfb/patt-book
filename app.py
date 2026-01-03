@@ -19,6 +19,7 @@ import sqlite3
 from functools import wraps
 import csv
 import io
+import os
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-in-production'  # Change this in production
@@ -1491,4 +1492,9 @@ def customer_retailer_detail(retailer_id):
 
 
 if __name__ == '__main__':
+    # For local development
     app.run(debug=True)
+else:
+    # For production deployment (Render, etc.)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
