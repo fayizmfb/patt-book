@@ -267,6 +267,13 @@ def logout():
 @app.route('/')
 def home():
     """Root route for health checks and service status"""
+    return render_template('test_root.html', 
+                         version="1.0.0", 
+                         timestamp=datetime.now().isoformat())
+
+@app.route('/health')
+def health_check_json():
+    """JSON health check for monitoring tools"""
     return {
         "status": "ok",
         "message": "Patt Book backend is running",
@@ -420,6 +427,9 @@ def customer_dashboard():
 
 def retailer_customers():
     """Show list of customers for the retailer"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+        
     db = get_db()
     retailer_id = session['user_id']
 
