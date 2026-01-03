@@ -638,14 +638,12 @@ def settings():
     
     if request.method == 'POST':
         # Update only store and configuration settings
-        default_dunning_days = request.form.get('default_dunning_days', '15')
         store_name = request.form.get('store_name', 'Your Store')
         store_address = request.form.get('store_address', '')
         store_email = request.form.get('store_email', '')
         
         # Update settings
         settings_to_update = [
-            ('default_dunning_days', default_dunning_days),
             ('store_name', store_name),
             ('store_address', store_address),
             ('store_email', store_email)
@@ -664,8 +662,8 @@ def settings():
     
     # Get current settings (only retailer-relevant settings)
     settings_data = {}
-    retailer_settings_keys = ['default_dunning_days', 'store_name', 'store_address', 'store_email']
-    settings_rows = db.execute('SELECT key, value, description FROM settings WHERE key IN (?, ?, ?, ?)', retailer_settings_keys).fetchall()
+    retailer_settings_keys = ['store_name', 'store_address', 'store_email']
+    settings_rows = db.execute('SELECT key, value, description FROM settings WHERE key IN (?, ?, ?)', retailer_settings_keys).fetchall()
     for row in settings_rows:
         settings_data[row['key']] = {
             'value': row['value'],
@@ -723,11 +721,12 @@ def send_manual_message(customer_id):
         ).fetchone()
         store_name = store_setting['value'] if store_setting and store_setting['value'] else 'Your Store'
         
-        # Prepare and send manual reminder message
-        from whatsapp_helper import prepare_manual_reminder_message, send_whatsapp_message
-        reminder_msg = prepare_manual_reminder_message(
+        # Prepare and send manual reminder message (same as credit entry message)
+        from whatsapp_helper import prepare_credit_entry_message, send_whatsapp_message
+        reminder_msg = prepare_credit_entry_message(
             customer['name'],
             store_name,
+            0,  # No current purchase amount for manual message
             total_outstanding
         )
         

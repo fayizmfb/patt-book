@@ -88,18 +88,20 @@ def send_whatsapp_message(phone_number, message_body):
 
 def prepare_credit_entry_message(customer_name, store_name, current_amount, total_outstanding):
     """
-    Prepare credit entry notification message
+    Prepare credit entry notification message (also used for manual reminders)
 
     Args:
         customer_name: Name of the customer
         store_name: Name of the store from settings
-        current_amount: The amount of the current credit entry
+        current_amount: The amount of the current credit entry (0 for manual reminders)
         total_outstanding: Total outstanding balance after this entry
 
     Returns:
         str: Formatted credit entry message
     """
-    message = f"""Hello {customer_name},
+    if current_amount > 0:
+        # Credit entry message
+        message = f"""Hello {customer_name},
 
 Thank you for your purchase at {store_name}!
 
@@ -110,32 +112,19 @@ Please keep this information for your records.
 
 Regards,
 {store_name} - Patt Book"""
+    else:
+        # Manual reminder message (same format, no purchase amount)
+        message = f"""Hello {customer_name},
 
-    return message
+Your current outstanding balance at {store_name} is: ₹{total_outstanding:.2f}
 
-
-def prepare_manual_reminder_message(customer_name, store_name, total_outstanding):
-    """
-    Prepare manual reminder message for outstanding balance
-
-    Args:
-        customer_name: Name of the customer
-        store_name: Name of the store from settings
-        total_outstanding: Current total outstanding balance
-
-    Returns:
-        str: Formatted manual reminder message
-    """
-    message = f"""Hello {customer_name},
-
-This is a friendly reminder from {store_name}.
-
-Your current outstanding balance is: ₹{total_outstanding:.2f}
-
-Please settle your account at your earliest convenience.
+Please keep this information for your records.
 
 Regards,
 {store_name} - Patt Book"""
 
     return message
+
+
+
 

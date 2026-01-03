@@ -51,31 +51,7 @@
             </small>
         </div>
 
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
 
-        <!-- Default Dunning / Due Days Section -->
-        <h3 style="color: #2c3e50; margin-bottom: 20px;">Default Due Days</h3>
-
-        <!-- Default Dunning Days -->
-        <div class="form-group">
-            <label for="default_dunning_days">Default Due Days *</label>
-            <select id="default_dunning_days" name="default_dunning_days" required>
-                <option value="7" {% if settings.get('default_dunning_days', {}).get('value') == '7' %}selected{% endif %}>7 days</option>
-                <option value="10" {% if settings.get('default_dunning_days', {}).get('value') == '10' %}selected{% endif %}>10 days</option>
-                <option value="14" {% if settings.get('default_dunning_days', {}).get('value') == '14' %}selected{% endif %}>14 days</option>
-                <option value="15" {% if settings.get('default_dunning_days', {}).get('value') == '15' %}selected{% endif %}>15 days</option>
-                <option value="21" {% if settings.get('default_dunning_days', {}).get('value') == '21' %}selected{% endif %}>21 days</option>
-                <option value="25" {% if settings.get('default_dunning_days', {}).get('value') == '25' %}selected{% endif %}>25 days</option>
-                <option value="30" {% if settings.get('default_dunning_days', {}).get('value') == '30' %}selected{% endif %}>30 days</option>
-                <option value="45" {% if settings.get('default_dunning_days', {}).get('value') == '45' %}selected{% endif %}>45 days</option>
-                <option value="60" {% if settings.get('default_dunning_days', {}).get('value') == '60' %}selected{% endif %}>60 days</option>
-            </select>
-            <small style="color: #666; display: block; margin-top: 5px;">
-                Default number of days from credit entry until payment is due
-            </small>
-        </div>
-
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
 
         <!-- Login Details Section (Read-only) -->
         <h3 style="color: #2c3e50; margin-bottom: 20px;">Login Details</h3>
