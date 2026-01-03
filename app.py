@@ -3,10 +3,9 @@ Retail App - Core Accounting Logic
 A simple Flask application for managing customer credits and payments
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response
 from datetime import datetime, timedelta
 from database import init_db, get_db
-from whatsapp_helper import send_whatsapp_message, prepare_credit_entry_message
 from firebase_config import (
     get_user_store_data, save_user_store_data,
     is_user_logged_in, get_current_user_id, get_current_user_phone
