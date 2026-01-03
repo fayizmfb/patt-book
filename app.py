@@ -262,6 +262,21 @@ def logout():
 
 
 # ============================================================================
+# ROOT ROUTE - Health check and service status
+# ============================================================================
+
+@app.route('/')
+def home():
+    """Root route for health checks and service status"""
+    return {
+        "status": "ok",
+        "message": "Patt Book backend is running",
+        "version": "1.0.0",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+# ============================================================================
 # DASHBOARD - Main landing page with 4 cards
 # ============================================================================
 
