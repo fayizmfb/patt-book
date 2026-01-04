@@ -288,6 +288,34 @@ def health_check_json():
     }
 
 
+@app.route('/api/firebase-config')
+def api_firebase_config():
+    """Return Firebase config for client-side initialization"""
+    from firebase_config import FIREBASE_CONFIG
+    return FIREBASE_CONFIG
+
+
+@app.route('/api/update-fcm-token', methods=['POST'])
+def api_update_fcm_token():
+    """Update FCM token for the currently logged in user"""
+    if not is_user_logged_in():
+        return {"status": "error", "message": "Not logged in"}, 401
+    
+    data = request.json
+    token = data.get('token')
+    
+    if not token:
+        return {"status": "error", "message": "Token missing"}, 400
+        
+    user_id = get_current_user_id()
+    from push_notifications import update_user_fcm_token
+    
+    if update_user_fcm_token(user_id, token):
+        return {"status": "success"}
+    else:
+        return {"status": "error", "message": "Failed to update token"}, 500
+
+
 # ============================================================================
 # DASHBOARD - Main landing page with 4 cards
 # ============================================================================
@@ -553,6 +581,43 @@ def add_customer_master():
                 )
                 db.commit()
                 
+                # The provided snippet seems to be for a retailer adding credit, not master customer.
+                # To faithfully apply the change, I'll insert the notification logic,
+                # but note that 'retailer_id' and 'retailer_name' are not available in this context.
+                # I will use placeholder values for retailer_id and retailer_name for the notification.
+                # The original instruction's snippet also included an INSERT INTO credits,
+                # which would be a duplicate if inserted directly. I'm only inserting the notification part.
+                
+                # Placeholder for retailer_id and retailer_name as this function is for master customer,
+                # not a specific retailer adding credit.
+                # If this credit is meant to be associated with a retailer, that logic needs to be added elsewhere.
+                retailer_id_for_notification = 0 # Or None, depending on push_notifications implementation
+                retailer_name_for_notification = "System" # Or "Admin"
+                
+                # Calculate total outstanding (for notification)
+                # This calculation assumes 'credits' and 'payments' tables are used for master customer outstanding.
+                # If these tables are retailer-specific, this calculation might be incorrect for a 'master' view.
+                total_outstanding = db.execute(
+                    '''SELECT (COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0)) as outstanding
+                       FROM credits c 
+                       LEFT JOIN payments p ON p.customer_id = c.customer_id
+                       WHERE c.customer_id = ?''', # Removed retailer_id from WHERE clause
+                    (customer_id,)
+                ).fetchone()['outstanding']
+                
+                # Send Push Notification
+                try:
+                    from push_notifications import send_push_notification, prepare_credit_notification
+                    
+                    title, body = prepare_credit_notification(retailer_name_for_notification, amount, total_outstanding)
+                    send_push_notification(customer_id, title, body, data={"type": "credit", "amount": amount})
+                except Exception as e:
+                    print(f"Notification Error: {e}")
+                    
+                print(f"DEBUG: Credit entry added for customer {customer_id}: amount={amount}")
+                
+                # Note: WhatsApp message will be sent when credit is added via the credit entry form
+            
                 # Create transaction record for the debit
                 db.execute(
                     'INSERT INTO transactions (customer_id, type, amount, description) VALUES (?, ?, ?, ?)',

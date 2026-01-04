@@ -257,6 +257,99 @@
     </div>
 
     {% block extra_js %}{% endblock %}
+
+    <!-- Global Firebase Messaging Logic (only if logged in) -->
+    {% if session.get('user_id') %}
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging-compat.js"></script>
+    <script>
+        // Use the config injected from server or available globally?
+        // We need a way to get config here. Let's assume we can fetch it or it's rendered.
+        // For base.html, we might not have 'firebase_config' variable always passed.
+        // Best approach: Fetch it from an endpoint if invalid, or embed if possible.
+        // Let's rely on a safe fetch for now or reuse if defined.
+
+        async function initFirebaseMessaging() {
+            try {
+                const response = await fetch('/health'); // Or a config endpoint? Let's assume we can add one or use what we have.
+                // Actually, let's just make sure the config is available.
+                // If this template is rendered without config, we might fail.
+                // Strategy: Add a lightweight endpoint for config or inject in session/g?
+
+                // Let's try to just use valid config if available in window, else try to fetch.
+                // Simplified: We will add a small data attribute to body or meta.
+            } catch (e) { console.log(e); }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Check if firebase is already initialized (e.g. by login.html)
+            if (!firebase.apps.length) {
+                // We need config. Let's fetch it from a new endpoint we will create.
+                fetch('/api/firebase-config')
+                    .then(response => response.json())
+                    .then(config => {
+                        if (config && config.apiKey) {
+                            firebase.initializeApp(config);
+                            setupMessaging();
+                        }
+                    })
+                    .catch(err => console.error("Error fetching firebase config", err));
+            } else {
+                setupMessaging();
+            }
+        });
+
+        function setupMessaging() {
+            try {
+                const messaging = firebase.messaging();
+
+                // Request permission
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        console.log('Notification permission granted.');
+                        // Get Token
+                        messaging.getToken({ vapidKey: '' }).then((currentToken) => {
+                            // vapidKey is optional if using default FCM setup
+                            if (currentToken) {
+                                updateTokenInBackend(currentToken);
+                            } else {
+                                console.log('No registration token available. Request permission to generate one.');
+                            }
+                        }).catch((err) => {
+                            console.log('An error occurred while retrieving token. ', err);
+                        });
+                    } else {
+                        console.log('Unable to get permission to notify.');
+                    }
+                });
+
+                // Handle foreground messages
+                messaging.onMessage((payload) => {
+                    console.log('Message received. ', payload);
+                    // Show toast/alert
+                    const { title, body } = payload.notification;
+                    alert(`${title}: ${body}`); // Simple alert for now, can be improved to Toast
+                });
+
+            } catch (error) {
+                console.error("Firebase Messaging Setup Error:", error);
+            }
+        }
+
+        function updateTokenInBackend(token) {
+            fetch('/api/update-fcm-token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token: token })
+            }).then(response => {
+                if (response.ok) console.log("FCM Token updated on server");
+                else console.error("Failed to update FCM token");
+            });
+        }
+    </script>
+    {% endif %}
 </body>
 
 </html>

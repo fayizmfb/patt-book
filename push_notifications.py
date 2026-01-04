@@ -9,34 +9,27 @@ import json
 from database import get_db
 
 
-def get_fcm_server_key():
-    """Get FCM server key from settings"""
-    db = get_db()
-    try:
-        result = db.execute(
-            'SELECT value FROM system_settings WHERE key = ?',
-            ('fcm_server_key',)
-        ).fetchone()
-        return result['value'] if result else None
-    except:
-        return None
-    finally:
-        db.close()
-
+from firebase_config import FIREBASE_AVAILABLE, verify_firebase_token, get_current_user_id
+import firebase_admin
+from firebase_admin import messaging
 
 def send_push_notification(user_id, title, body, data=None):
     """
     Send push notification to a user via FCM
-
+    
     Args:
         user_id: User ID to send notification to
         title: Notification title
         body: Notification body
         data: Additional data payload (dict)
-
+        
     Returns:
         bool: True if sent successfully, False otherwise
     """
+    if not FIREBASE_AVAILABLE:
+        print("Firebase not available for push notifications")
+        return False
+        
     db = get_db()
     try:
         # Get user's FCM token
@@ -49,49 +42,32 @@ def send_push_notification(user_id, title, body, data=None):
             print(f"No FCM token found for user {user_id}")
             return False
 
-        fcm_server_key = get_fcm_server_key()
-        if not fcm_server_key:
-            print("FCM server key not configured")
-            return False
-
-        # Prepare FCM payload
-        payload = {
-            "to": user['fcm_token'],
-            "notification": {
-                "title": title,
-                "body": body,
-                "sound": "default"
-            }
-        }
-
-        if data:
-            payload["data"] = {k: str(v) for k, v in data.items()}  # FCM requires string values
-
-        headers = {
-            'Authorization': f'key={fcm_server_key}',
-            'Content-Type': 'application/json'
-        }
-
-        response = requests.post(
-            'https://fcm.googleapis.com/fcm/send',
-            json=payload,
-            headers=headers,
-            timeout=10
+        # Prepare FCM message
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+            ),
+            token=user['fcm_token'],
+            data={k: str(v) for k, v in data.items()} if data else None
         )
 
-        if response.status_code == 200:
+        try:
+            # Send the message
+            response = messaging.send(message)
+            print(f"Successfully sent message to user {user_id}: {response}")
+            
             # Log the notification
             db.execute(
                 'INSERT INTO push_notifications (user_id, title, body, data, status) VALUES (?, ?, ?, ?, ?)',
                 (user_id, title, body, json.dumps(data) if data else None, 'sent')
             )
             db.commit()
-            print(f"Push notification sent to user {user_id}")
             return True
-        else:
-            print(f"Failed to send push notification: {response.status_code} - {response.text}")
+        except messaging.ApiCallError as e:
+            print(f"FCM Send Error: {e}")
             return False
-
+            
     except Exception as e:
         print(f"Exception sending push notification: {str(e)}")
         return False
