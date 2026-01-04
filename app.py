@@ -190,7 +190,30 @@ def retailer_onboarding():
     if request.method == 'POST':
         store_name = request.form.get('store_name', '').strip()
         store_address = request.form.get('store_address', '').strip()
-        store_photo = request.form.get('store_photo', '').strip()  # URL or file path
+        
+        # Handle File Upload
+        store_photo_url = '/static/images/default_store.png' # Default
+        if 'store_photo' in request.files:
+            file = request.files['store_photo']
+            if file and file.filename != '':
+                try:
+                    import os
+                    from werkzeug.utils import secure_filename
+                    
+                    filename = secure_filename(file.filename)
+                    # Use timestamp to make filename unique
+                    filename = f"{int(datetime.now().timestamp())}_{filename}"
+                    
+                    upload_folder = os.path.join(app.static_folder, 'uploads', 'retailers')
+                    os.makedirs(upload_folder, exist_ok=True)
+                    
+                    file_path = os.path.join(upload_folder, filename)
+                    file.save(file_path)
+                    
+                    store_photo_url = f"/static/uploads/retailers/{filename}"
+                except Exception as e:
+                    print(f"Error saving file: {e}")
+                    # Keep default if error
 
         if not store_name:
             flash('Store name is required!', 'error')
@@ -201,14 +224,14 @@ def retailer_onboarding():
             # Create retailer user
             cursor = db.execute(
                 'INSERT INTO users (phone_number, user_type, name, address, profile_photo_url) VALUES (?, ?, ?, ?, ?)',
-                (session['phone_number'], 'retailer', store_name, store_address, store_photo)
+                (session['phone_number'], 'retailer', store_name, store_address, store_photo_url)
             )
             user_id = cursor.lastrowid
 
             # Create retailer profile
             db.execute(
                 'INSERT INTO retailer_profiles (user_id, store_name, store_address, store_photo_url) VALUES (?, ?, ?, ?)',
-                (user_id, store_name, store_address, store_photo)
+                (user_id, store_name, store_address, store_photo_url)
             )
 
             db.commit()
@@ -216,6 +239,8 @@ def retailer_onboarding():
             # Set session
             session['user_id'] = user_id
             session['user_type'] = 'retailer'
+            # Also set store name in session for easy access
+            session['store_name'] = store_name
 
             flash('Welcome to Patt Book!', 'success')
             return redirect(url_for('retailer_dashboard'))

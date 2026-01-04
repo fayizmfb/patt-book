@@ -9,15 +9,11 @@
         Tell us about your business to get started with Patt Book
     </p>
 
-    <form method="POST" action="{{ url_for('retailer_onboarding') }}">
+    <form method="POST" action="{{ url_for('retailer_onboarding') }}" enctype="multipart/form-data">
         <!-- Store Name -->
         <div class="form-group">
             <label for="store_name">Store/Shop Name *</label>
-            <input type="text"
-                   id="store_name"
-                   name="store_name"
-                   placeholder="e.g., MFB General Store"
-                   required>
+            <input type="text" id="store_name" name="store_name" placeholder="e.g., MFB General Store" required>
             <small style="color: #666; display: block; margin-top: 5px;">
                 This name will be visible to your customers
             </small>
@@ -26,24 +22,19 @@
         <!-- Store Address -->
         <div class="form-group">
             <label for="store_address">Store Address</label>
-            <textarea id="store_address"
-                      name="store_address"
-                      placeholder="Street address, city, state, pincode"
-                      rows="3"></textarea>
+            <textarea id="store_address" name="store_address" placeholder="Street address, city, state, pincode"
+                rows="3"></textarea>
             <small style="color: #666; display: block; margin-top: 5px;">
                 Optional: Helps customers locate your store
             </small>
         </div>
 
-        <!-- Store Photo URL -->
+        <!-- Store Photo -->
         <div class="form-group">
-            <label for="store_photo">Store Photo URL</label>
-            <input type="url"
-                   id="store_photo"
-                   name="store_photo"
-                   placeholder="https://example.com/store-photo.jpg">
+            <label for="store_photo">Store Profile Image (DP)</label>
+            <input type="file" id="store_photo" name="store_photo" accept="image/*">
             <small style="color: #666; display: block; margin-top: 5px;">
-                Optional: URL to your store's photo (will be used as profile picture)
+                Upload a photo of your shop or logo. This will be shown to your customers.
             </small>
         </div>
 
