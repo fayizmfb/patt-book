@@ -45,88 +45,92 @@ def login():
     Unified login page for both retailers and customers
     """
     if request.method == 'POST':
-        # Check if this is a legacy/simplified request or Firebase Auth request
-        id_token = request.form.get('id_token')
-        
-        if id_token:
-            # Client-side Firebase Auth flow
-            from firebase_config import verify_firebase_token
+        try:
+            # Check if this is a legacy/simplified request or Firebase Auth request
+            id_token = request.form.get('id_token')
             
-            decoded_token = verify_firebase_token(id_token)
-            if decoded_token:
-                phone_number = decoded_token.get('phone_number')
-                auth_mode = request.form.get('auth_mode', 'login')
-                # In login mode, user type isn't selectable, so we don't rely on it for existence check
-                # In signup mode, we use it to direct to onboarding
-                user_type_form = request.form.get('user_type', 'retailer')
+            if id_token:
+                # Client-side Firebase Auth flow
+                from firebase_config import verify_firebase_token
                 
-                db = get_db()
-                try:
-                    # Check if user exists
-                    user = db.execute(
-                        'SELECT id, name, user_type FROM users WHERE phone_number = ?',
-                        (phone_number,)
-                    ).fetchone()
+                decoded_token = verify_firebase_token(id_token)
+                if decoded_token:
+                    phone_number = decoded_token.get('phone_number')
+                    auth_mode = request.form.get('auth_mode', 'login')
+                    user_type_form = request.form.get('user_type', 'retailer')
                     
-                    if auth_mode == 'login':
-                        if user:
-                            # Strict Login: User must exist
-                            session['user_id'] = user['id']
-                            session['user_type'] = user['user_type']
-                            session['phone_number'] = phone_number
-                            
-                            db.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
-                            db.commit()
-                            
-                            flash('Login successful!', 'success')
-                            if user['user_type'] == 'retailer':
-                                return redirect(url_for('retailer_dashboard'))
+                    db = get_db()
+                    try:
+                        # Check if user exists
+                        user = db.execute(
+                            'SELECT id, name, user_type FROM users WHERE phone_number = ?',
+                            (phone_number,)
+                        ).fetchone()
+                        
+                        if auth_mode == 'login':
+                            if user:
+                                # Strict Login: User must exist
+                                session['user_id'] = user['id']
+                                session['user_type'] = user['user_type']
+                                session['phone_number'] = phone_number
+                                
+                                db.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
+                                db.commit()
+                                
+                                flash('Login successful!', 'success')
+                                if user['user_type'] == 'retailer':
+                                    return redirect(url_for('retailer_dashboard'))
+                                else:
+                                    return redirect(url_for('customer_dashboard'))
                             else:
-                                return redirect(url_for('customer_dashboard'))
-                        else:
-                            # User does not exist, but tried to login
-                            flash('Account not found. Please create an account.', 'error')
-                            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-                            
-                    else: # auth_mode == 'signup' or unknown (default to signup behavior if specific)
-                        if user:
-                            # User exists, but tried to sign up
-                            flash('Account already exists. Please login.', 'warning')
-                            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-                        else:
-                            # Strict Signup: User must NOT exist
-                            session['phone_number'] = phone_number
-                            session['user_type'] = user_type_form
-                            
-                            if user_type_form == 'retailer':
-                                return redirect(url_for('retailer_onboarding'))
+                                # User does not exist, but tried to login
+                                flash('Account not found. Please create an account.', 'error')
+                                from firebase_config import FIREBASE_CONFIG
+                                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+                                
+                        else: # auth_mode == 'signup'
+                            if user:
+                                # User exists, but tried to sign up
+                                flash('Account already exists. Please login.', 'warning')
+                                from firebase_config import FIREBASE_CONFIG
+                                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
                             else:
-                                return redirect(url_for('customer_onboarding'))
-                finally:
-                    db.close()
-            else:
-                flash('Authentication failed. Please try again.', 'error')
-                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+                                # Strict Signup: User must NOT exist
+                                session['phone_number'] = phone_number
+                                session['user_type'] = user_type_form
+                                
+                                # Redirect to specific onboarding based on type
+                                if user_type_form == 'retailer':
+                                    return redirect(url_for('retailer_onboarding'))
+                                else:
+                                    return redirect(url_for('customer_onboarding'))
+                    finally:
+                        db.close()
+                else:
+                    flash('Authentication failed (Invalid Token). Please try again.', 'error')
+                    from firebase_config import FIREBASE_CONFIG
+                    return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+    
+            # Fallback/Legacy
+            flash('Invalid request (No token provided).', 'error')
+            from firebase_config import FIREBASE_CONFIG
+            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
 
-        # Fallback to old flow if no id_token (or keep for backward compat for a moment)
-        phone_number = request.form.get('phone_number', '').strip()
-        user_type = request.form.get('user_type', 'retailer')
-        verification_code = request.form.get('verification_code', '').strip()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            flash(f'System Error during login: {str(e)}', 'error')
+            # Ensure we can render the template even if import failed earlier
+            try:
+                from firebase_config import FIREBASE_CONFIG
+            except:
+                FIREBASE_CONFIG = {}
+            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
 
-        if not phone_number and not id_token:
-             flash('Phone number is required!', 'error')
-             from firebase_config import FIREBASE_CONFIG
-             return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-
-        # ... (Old simplified flow code removal or commented out) ...
-        # For now, let's return the simplified flow ONLY if strictly requested, 
-        # but realistically we want to force the new flow.
-        # But to avoid breaking if JS fails, we just re-render login.
-        
+    try:
         from firebase_config import FIREBASE_CONFIG
-        return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-
-    from firebase_config import FIREBASE_CONFIG
+    except:
+        FIREBASE_CONFIG = {}
     return render_template('login.html', firebase_config=FIREBASE_CONFIG)
 
 
