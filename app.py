@@ -105,8 +105,8 @@ def login():
                                     return redirect(url_for('retailer_onboarding'))
                                 else:
                                     return redirect(url_for('customer_onboarding'))
-                    finally:
-                        db.close()
+                finally:
+                    db.close()
     
             # Fallback/Legacy
             flash('Invalid request (No token provided).', 'error')
