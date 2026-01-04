@@ -122,22 +122,24 @@
         }
     }
 
-    <script>
     // Initialize Firebase
-        // Backend injects the config dictionary
-        const firebaseConfig = {{ firebase_config| tojson | safe}};
+    // Backend injects the config dictionary
+    const firebaseConfig = {{ firebase_config| tojson | safe }};
 
-        if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key-here') {
-            console.error("Firebase config is missing or invalid. Check environment variables.");
-        document.getElementById('status-message').innerText = "Configuration Error: Firebase API Key missing.";
-        document.getElementById('status-message').style.display = 'block';
-        document.getElementById('status-message').style.color = 'red';
+    if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key-here') {
+        console.error("Firebase config is missing or invalid. Check environment variables.");
+        const statusMsg = document.getElementById('status-message');
+        if (statusMsg) {
+            statusMsg.innerText = "Configuration Error: Firebase API Key missing.";
+            statusMsg.style.display = 'block';
+            statusMsg.style.color = 'red';
+        }
     } else {
-            firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(firebaseConfig);
     }
 
-        const ui = {
-            phoneSection: document.getElementById('phone-section'),
+    const ui = {
+        phoneSection: document.getElementById('phone-section'),
         otpSection: document.getElementById('otp-section'),
         sendOtpBtn: document.getElementById('send-otp-btn'),
         verifyOtpBtn: document.getElementById('verify-otp-btn'),
@@ -148,12 +150,12 @@
         statusMsg: document.getElementById('status-message')
     };
 
-        // State to hold confirmation result
-        window.confirmationResult = null;
+    // State to hold confirmation result
+    window.confirmationResult = null;
 
-        // Setup Recaptcha Verifier
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-            'size': 'normal',
+    // Setup Recaptcha Verifier
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+        'size': 'normal',
         'callback': (response) => {
             // reCAPTCHA solved, allow signInWithPhoneNumber.
             console.log("Recaptcha verified");
@@ -161,18 +163,18 @@
         'expired-callback': () => {
             // Response expired. Ask user to solve reCAPTCHA again.
             console.log("Recaptcha expired");
-        showMessage("Recaptcha expired. Please try again.", "error");
+            showMessage("Recaptcha expired. Please try again.", "error");
         }
     });
 
-        // 1. Send OTP
-        ui.sendOtpBtn.addEventListener('click', function () {
+    // 1. Send OTP
+    ui.sendOtpBtn.addEventListener('click', function () {
         const phoneNumber = ui.phoneInput.value.trim();
         const appVerifier = window.recaptchaVerifier;
 
         if (!phoneNumber) {
             showMessage("Please enter a phone number.", "error");
-        return;
+            return;
         }
 
         ui.sendOtpBtn.disabled = true;
@@ -180,25 +182,25 @@
 
         firebase.auth().signInWithPhoneNumber(phoneNumber, appVerifier)
             .then((result) => {
-            // SMS sent. Prompt user to type the code from the message, then sign the
-            // user in with confirmationResult.confirm(code).
-            window.confirmationResult = result;
+                // SMS sent. Prompt user to type the code from the message, then sign the
+                // user in with confirmationResult.confirm(code).
+                window.confirmationResult = result;
 
-        // Switch UI
-        ui.phoneSection.style.display = 'none';
-        ui.otpSection.style.display = 'block';
-        showMessage("Code sent! Please check your SMS.", "success");
+                // Switch UI
+                ui.phoneSection.style.display = 'none';
+                ui.otpSection.style.display = 'block';
+                showMessage("Code sent! Please check your SMS.", "success");
             }).catch((error) => {
-            // Error; SMS not sent
-            console.error("Error sending SMS", error);
-        ui.sendOtpBtn.disabled = false;
+                // Error; SMS not sent
+                console.error("Error sending SMS", error);
+                ui.sendOtpBtn.disabled = false;
 
-        // Reset recaptcha
-        if (window.recaptchaVerifier && window.recaptchaVerifier.clear) {
-            window.recaptchaVerifier.clear();
+                // Reset recaptcha
+                if (window.recaptchaVerifier && window.recaptchaVerifier.clear) {
+                    window.recaptchaVerifier.clear();
                 }
 
-        showMessage(`Error: ${error.message}`, "error");
+                showMessage(`Error: ${error.message}`, "error");
             });
     });
 
