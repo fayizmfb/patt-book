@@ -5,21 +5,31 @@
 {% block content %}
 
 <div class="card" style="max-width: 500px; margin: 50px auto;">
-    <h2>Login to Patt Book</h2>
+    <!-- Auth Tabs -->
+    <div class="auth-tabs" style="display: flex; margin-bottom: 20px; border-bottom: 1px solid #dee2e6;">
+        <button class="btn btn-link nav-tab active" id="tab-login" onclick="switchMode('login')"
+            style="flex: 1; text-decoration: none; font-weight: bold; padding: 10px; border-bottom: 2px solid #007bff; color: #007bff;">Login</button>
+        <button class="btn btn-link nav-tab" id="tab-signup" onclick="switchMode('signup')"
+            style="flex: 1; text-decoration: none; color: #6c757d; padding: 10px;">Create Account</button>
+    </div>
+
+    <h2 id="form-title">Login to Patt Book</h2>
     <p style="color: #666; margin-bottom: 30px;" id="login-helper-text">
-        Choose your account type and enter your phone number to receive a verification code.
+        Welcome back! Enter your phone number to login.
     </p>
 
     <!-- Hidden form to submit ID token to backend after Firebase verification -->
     <form id="login-form" method="POST" action="{{ url_for('login') }}" style="display: none;">
         <input type="hidden" name="id_token" id="id_token">
         <input type="hidden" name="user_type" id="hidden_user_type">
+        <input type="hidden" name="auth_mode" id="auth_mode" value="login">
     </form>
 
     <div id="auth-container">
         <!-- Step 1: Phone Number Input -->
         <div id="phone-section">
-            <div class="form-group">
+            <!-- User Type Selection (Only for Signup) -->
+            <div class="form-group" id="user-type-group" style="display: none;">
                 <label for="user_type">I am a:</label>
                 <select id="user_type" class="form-control">
                     <option value="retailer">Retailer/Shop Owner</option>
@@ -64,21 +74,70 @@
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
 
 <script>
-    // Initialize Firebase
-    // Backend injects the config dictionary
-    const firebaseConfig = {{ firebase_config| tojson | safe }};
+    // Use the config injected from server or available globally?
+    // We need a way to get config here. Let's assume we can fetch it or it's rendered.
+    // For base.html, we might not have 'firebase_config' variable always passed.
+    // Best approach: Fetch it from an endpoint if invalid, or embed if possible.
+    // Let's rely on a safe fetch for now or reuse if defined.
 
-    if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key-here') {
-        console.error("Firebase config is missing or invalid. Check environment variables.");
+    // Mode switching logic
+    function switchMode(mode) {
+        const tabLogin = document.getElementById('tab-login');
+        const tabSignup = document.getElementById('tab-signup');
+        const userTypeGroup = document.getElementById('user-type-group');
+        const authModeInput = document.getElementById('auth_mode');
+        const formTitle = document.getElementById('form-title');
+        const helperText = document.getElementById('login-helper-text');
+
+        if (mode === 'login') {
+            // Update Tabs
+            tabLogin.classList.add('active');
+            tabLogin.style.borderBottom = '2px solid #007bff';
+            tabLogin.style.color = '#007bff';
+
+            tabSignup.classList.remove('active');
+            tabSignup.style.borderBottom = 'none';
+            tabSignup.style.color = '#6c757d';
+
+            // Update UI
+            userTypeGroup.style.display = 'none';
+            authModeInput.value = 'login';
+            formTitle.innerText = 'Login to Patt Book';
+            helperText.innerText = 'Welcome back! Enter your phone number to login.';
+        } else {
+            // Update Tabs
+            tabSignup.classList.add('active');
+            tabSignup.style.borderBottom = '2px solid #007bff';
+            tabSignup.style.color = '#007bff';
+
+            tabLogin.classList.remove('active');
+            tabLogin.style.borderBottom = 'none';
+            tabLogin.style.color = '#6c757d';
+
+            // Update UI
+            userTypeGroup.style.display = 'block';
+            authModeInput.value = 'signup';
+            formTitle.innerText = 'Create Account';
+            helperText.innerText = 'New here? Create an account to get started.';
+        }
+    }
+
+    <script>
+    // Initialize Firebase
+        // Backend injects the config dictionary
+        const firebaseConfig = {{ firebase_config| tojson | safe}};
+
+        if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key-here') {
+            console.error("Firebase config is missing or invalid. Check environment variables.");
         document.getElementById('status-message').innerText = "Configuration Error: Firebase API Key missing.";
         document.getElementById('status-message').style.display = 'block';
         document.getElementById('status-message').style.color = 'red';
     } else {
-        firebase.initializeApp(firebaseConfig);
+            firebase.initializeApp(firebaseConfig);
     }
 
-    const ui = {
-        phoneSection: document.getElementById('phone-section'),
+        const ui = {
+            phoneSection: document.getElementById('phone-section'),
         otpSection: document.getElementById('otp-section'),
         sendOtpBtn: document.getElementById('send-otp-btn'),
         verifyOtpBtn: document.getElementById('verify-otp-btn'),
@@ -89,12 +148,12 @@
         statusMsg: document.getElementById('status-message')
     };
 
-    // State to hold confirmation result
-    window.confirmationResult = null;
+        // State to hold confirmation result
+        window.confirmationResult = null;
 
-    // Setup Recaptcha Verifier
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-        'size': 'normal',
+        // Setup Recaptcha Verifier
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+            'size': 'normal',
         'callback': (response) => {
             // reCAPTCHA solved, allow signInWithPhoneNumber.
             console.log("Recaptcha verified");
@@ -102,18 +161,18 @@
         'expired-callback': () => {
             // Response expired. Ask user to solve reCAPTCHA again.
             console.log("Recaptcha expired");
-            showMessage("Recaptcha expired. Please try again.", "error");
+        showMessage("Recaptcha expired. Please try again.", "error");
         }
     });
 
-    // 1. Send OTP
-    ui.sendOtpBtn.addEventListener('click', function () {
+        // 1. Send OTP
+        ui.sendOtpBtn.addEventListener('click', function () {
         const phoneNumber = ui.phoneInput.value.trim();
         const appVerifier = window.recaptchaVerifier;
 
         if (!phoneNumber) {
             showMessage("Please enter a phone number.", "error");
-            return;
+        return;
         }
 
         ui.sendOtpBtn.disabled = true;
@@ -121,25 +180,25 @@
 
         firebase.auth().signInWithPhoneNumber(phoneNumber, appVerifier)
             .then((result) => {
-                // SMS sent. Prompt user to type the code from the message, then sign the
-                // user in with confirmationResult.confirm(code).
-                window.confirmationResult = result;
+            // SMS sent. Prompt user to type the code from the message, then sign the
+            // user in with confirmationResult.confirm(code).
+            window.confirmationResult = result;
 
-                // Switch UI
-                ui.phoneSection.style.display = 'none';
-                ui.otpSection.style.display = 'block';
-                showMessage("Code sent! Please check your SMS.", "success");
+        // Switch UI
+        ui.phoneSection.style.display = 'none';
+        ui.otpSection.style.display = 'block';
+        showMessage("Code sent! Please check your SMS.", "success");
             }).catch((error) => {
-                // Error; SMS not sent
-                console.error("Error sending SMS", error);
-                ui.sendOtpBtn.disabled = false;
+            // Error; SMS not sent
+            console.error("Error sending SMS", error);
+        ui.sendOtpBtn.disabled = false;
 
-                // Reset recaptcha
-                if (window.recaptchaVerifier && window.recaptchaVerifier.clear) {
-                    window.recaptchaVerifier.clear();
+        // Reset recaptcha
+        if (window.recaptchaVerifier && window.recaptchaVerifier.clear) {
+            window.recaptchaVerifier.clear();
                 }
 
-                showMessage(`Error: ${error.message}`, "error");
+        showMessage(`Error: ${error.message}`, "error");
             });
     });
 

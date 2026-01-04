@@ -55,7 +55,10 @@ def login():
             decoded_token = verify_firebase_token(id_token)
             if decoded_token:
                 phone_number = decoded_token.get('phone_number')
-                user_type = request.form.get('user_type', 'retailer')
+                auth_mode = request.form.get('auth_mode', 'login')
+                # In login mode, user type isn't selectable, so we don't rely on it for existence check
+                # In signup mode, we use it to direct to onboarding
+                user_type_form = request.form.get('user_type', 'retailer')
                 
                 db = get_db()
                 try:
@@ -65,31 +68,40 @@ def login():
                         (phone_number,)
                     ).fetchone()
                     
-                    if user:
-                        # Existing user - login
-                        # If user exists but trying to login as different type, warn or handle?
-                        # For now assume phone number unique per user
-                        session['user_id'] = user['id']
-                        session['user_type'] = user['user_type']
-                        session['phone_number'] = phone_number
-                        
-                        db.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
-                        db.commit()
-                        
-                        flash('Login successful!', 'success')
-                        if user['user_type'] == 'retailer':
-                            return redirect(url_for('retailer_dashboard'))
+                    if auth_mode == 'login':
+                        if user:
+                            # Strict Login: User must exist
+                            session['user_id'] = user['id']
+                            session['user_type'] = user['user_type']
+                            session['phone_number'] = phone_number
+                            
+                            db.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
+                            db.commit()
+                            
+                            flash('Login successful!', 'success')
+                            if user['user_type'] == 'retailer':
+                                return redirect(url_for('retailer_dashboard'))
+                            else:
+                                return redirect(url_for('customer_dashboard'))
                         else:
-                            return redirect(url_for('customer_dashboard'))
-                    else:
-                        # New user - redirect to onboarding
-                        session['phone_number'] = phone_number
-                        session['user_type'] = user_type
-                        
-                        if user_type == 'retailer':
-                            return redirect(url_for('retailer_onboarding'))
+                            # User does not exist, but tried to login
+                            flash('Account not found. Please create an account.', 'error')
+                            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+                            
+                    else: # auth_mode == 'signup' or unknown (default to signup behavior if specific)
+                        if user:
+                            # User exists, but tried to sign up
+                            flash('Account already exists. Please login.', 'warning')
+                            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
                         else:
-                            return redirect(url_for('customer_onboarding'))
+                            # Strict Signup: User must NOT exist
+                            session['phone_number'] = phone_number
+                            session['user_type'] = user_type_form
+                            
+                            if user_type_form == 'retailer':
+                                return redirect(url_for('retailer_onboarding'))
+                            else:
+                                return redirect(url_for('customer_onboarding'))
                 finally:
                     db.close()
             else:
