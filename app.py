@@ -53,14 +53,15 @@ def login():
                 # Client-side Firebase Auth flow
                 from firebase_config import verify_firebase_token
                 
+                # verify_firebase_token now raises Exception on failure
                 decoded_token = verify_firebase_token(id_token)
-                if decoded_token:
-                    phone_number = decoded_token.get('phone_number')
-                    auth_mode = request.form.get('auth_mode', 'login')
-                    user_type_form = request.form.get('user_type', 'retailer')
-                    
-                    db = get_db()
-                    try:
+                
+                phone_number = decoded_token.get('phone_number')
+                auth_mode = request.form.get('auth_mode', 'login')
+                user_type_form = request.form.get('user_type', 'retailer')
+                
+                db = get_db()
+                try:
                         # Check if user exists
                         user = db.execute(
                             'SELECT id, name, user_type FROM users WHERE phone_number = ?',
@@ -106,10 +107,6 @@ def login():
                                     return redirect(url_for('customer_onboarding'))
                     finally:
                         db.close()
-                else:
-                    flash('Authentication failed (Invalid Token). Please try again.', 'error')
-                    from firebase_config import FIREBASE_CONFIG
-                    return render_template('login.html', firebase_config=FIREBASE_CONFIG)
     
             # Fallback/Legacy
             flash('Invalid request (No token provided).', 'error')

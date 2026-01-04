@@ -55,17 +55,18 @@ def verify_firebase_token(id_token):
         id_token: The Firebase ID token string
     
     Returns:
-        dict: Decoded token claims (uid, phone_number, etc.) if valid, None otherwise
+        dict: Decoded token claims (uid, phone_number, etc.) if valid
+    
+    Raises:
+        Exception: If verification fails or Firebase is not available
     """
     if not FIREBASE_AVAILABLE:
-        return None
+        raise Exception("Firebase backend is not initialized. Check environment variables.")
 
-    try:
-        decoded_token = auth.verify_id_token(id_token)
-        return decoded_token
-    except Exception as e:
-        print(f"Error verifying Firebase ID token: {e}")
-        return None
+    # The verify_id_token function raises its own exceptions (ExpiredIdTokenError, etc.)
+    # We will let them bubble up to be caught by app.py
+    decoded_token = auth.verify_id_token(id_token)
+    return decoded_token
 
 
 def get_user_store_data(user_id):
