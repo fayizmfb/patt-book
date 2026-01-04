@@ -3,64 +3,196 @@
 {% block title %}Login - Retail App{% endblock %}
 
 {% block content %}
+
 <div class="card" style="max-width: 500px; margin: 50px auto;">
     <h2>Login to Patt Book</h2>
-    <p style="color: #666; margin-bottom: 30px;">
-        Choose your account type and enter your phone number to receive an OTP code
+    <p style="color: #666; margin-bottom: 30px;" id="login-helper-text">
+        Choose your account type and enter your phone number to receive a verification code.
     </p>
 
-    <form method="POST" action="{{ url_for('login') }}">
-        <!-- User Type Selection -->
-        <div class="form-group">
-            <label for="user_type">I am a:</label>
-            <select id="user_type" name="user_type" required {% if show_otp_input %}disabled{% endif %}>
-                <option value="retailer" {% if user_type == 'retailer' %}selected{% endif %}>Retailer/Shop Owner</option>
-                <option value="customer" {% if user_type == 'customer' %}selected{% endif %}>Customer</option>
-            </select>
-        </div>
-
-        <!-- Phone Number Input -->
-        <div class="form-group">
-            <label for="phone_number">Phone Number *</label>
-            <input type="tel"
-                   id="phone_number"
-                   name="phone_number"
-                   value="{{ phone_number or '' }}"
-                   placeholder="+1234567890"
-                   required
-                   {% if show_otp_input %}readonly{% endif %}>
-            <small style="color: #666; display: block; margin-top: 5px;">
-                Include country code (e.g., +1 for US, +91 for India)
-            </small>
-        </div>
-
-        <!-- OTP Input (shown after phone number is submitted) -->
-        {% if show_otp_input %}
-        <div class="form-group">
-            <label for="verification_code">Verification Code *</label>
-            <input type="text"
-                   id="verification_code"
-                   name="verification_code"
-                   placeholder="Enter 6-digit code"
-                   required
-                   maxlength="6"
-                   pattern="[0-9]{6}">
-            <small style="color: #666; display: block; margin-top: 5px;">
-                Enter the 6-digit code sent to your phone
-            </small>
-        </div>
-        {% endif %}
-
-        <div class="actions">
-            <button type="submit" class="btn btn-success">
-                {% if show_otp_input %}Verify Code{% else %}Send OTP{% endif %}
-            </button>
-        </div>
+    <!-- Hidden form to submit ID token to backend after Firebase verification -->
+    <form id="login-form" method="POST" action="{{ url_for('login') }}" style="display: none;">
+        <input type="hidden" name="id_token" id="id_token">
+        <input type="hidden" name="user_type" id="hidden_user_type">
     </form>
-    
-    <p style="text-align: center; margin-top: 20px; font-size: 12px; color: #999;">
-        Demo Mode: Enter any 6-digit code to continue
-    </p>
+
+    <div id="auth-container">
+        <!-- Step 1: Phone Number Input -->
+        <div id="phone-section">
+            <div class="form-group">
+                <label for="user_type">I am a:</label>
+                <select id="user_type" class="form-control">
+                    <option value="retailer">Retailer/Shop Owner</option>
+                    <option value="customer">Customer</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="phone_number">Phone Number</label>
+                <input type="tel" id="phone_number" class="form-control" placeholder="+919876543210" required>
+                <small class="text-muted">Enter full number with country code (e.g., +91 for India)</small>
+            </div>
+
+            <!-- ReCaptcha Container -->
+            <div id="recaptcha-container" style="margin-bottom: 15px;"></div>
+
+            <button id="send-otp-btn" class="btn btn-success" style="width: 100%;">Send Verification Code</button>
+        </div>
+
+        <!-- Step 2: OTP Input (Hidden initially) -->
+        <div id="otp-section" style="display: none;">
+            <div class="form-group">
+                <label for="verification_code">Verification Code</label>
+                <input type="text" id="verification_code" class="form-control" placeholder="Enter 6-digit code"
+                    maxlength="6">
+            </div>
+
+            <button id="verify-otp-btn" class="btn btn-success" style="width: 100%;">Verify & Login</button>
+            <button id="retry-btn" class="btn btn-link" style="width: 100%; margin-top: 10px;">Retry / Change
+                Number</button>
+        </div>
+    </div>
+
+    <div id="status-message" style="margin-top: 15px; text-align: center; display: none;"></div>
 </div>
 {% endblock %}
 
+{% block extra_js %}
+<!-- Firebase App (the core Firebase SDK) is always required and must be listed first -->
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<!-- Add Firebase products that you want to use -->
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+
+<script>
+    // Initialize Firebase
+    // Backend injects the config dictionary
+    const firebaseConfig = {{ firebase_config| tojson | safe }};
+
+    if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey === 'your-api-key-here') {
+        console.error("Firebase config is missing or invalid. Check environment variables.");
+        document.getElementById('status-message').innerText = "Configuration Error: Firebase API Key missing.";
+        document.getElementById('status-message').style.display = 'block';
+        document.getElementById('status-message').style.color = 'red';
+    } else {
+        firebase.initializeApp(firebaseConfig);
+    }
+
+    const ui = {
+        phoneSection: document.getElementById('phone-section'),
+        otpSection: document.getElementById('otp-section'),
+        sendOtpBtn: document.getElementById('send-otp-btn'),
+        verifyOtpBtn: document.getElementById('verify-otp-btn'),
+        retryBtn: document.getElementById('retry-btn'),
+        phoneInput: document.getElementById('phone_number'),
+        typeInput: document.getElementById('user_type'),
+        otpInput: document.getElementById('verification_code'),
+        statusMsg: document.getElementById('status-message')
+    };
+
+    // State to hold confirmation result
+    window.confirmationResult = null;
+
+    // Setup Recaptcha Verifier
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+        'size': 'normal',
+        'callback': (response) => {
+            // reCAPTCHA solved, allow signInWithPhoneNumber.
+            console.log("Recaptcha verified");
+        },
+        'expired-callback': () => {
+            // Response expired. Ask user to solve reCAPTCHA again.
+            console.log("Recaptcha expired");
+            showMessage("Recaptcha expired. Please try again.", "error");
+        }
+    });
+
+    // 1. Send OTP
+    ui.sendOtpBtn.addEventListener('click', function () {
+        const phoneNumber = ui.phoneInput.value.trim();
+        const appVerifier = window.recaptchaVerifier;
+
+        if (!phoneNumber) {
+            showMessage("Please enter a phone number.", "error");
+            return;
+        }
+
+        ui.sendOtpBtn.disabled = true;
+        showMessage("Sending verification code...", "info");
+
+        firebase.auth().signInWithPhoneNumber(phoneNumber, appVerifier)
+            .then((result) => {
+                // SMS sent. Prompt user to type the code from the message, then sign the
+                // user in with confirmationResult.confirm(code).
+                window.confirmationResult = result;
+
+                // Switch UI
+                ui.phoneSection.style.display = 'none';
+                ui.otpSection.style.display = 'block';
+                showMessage("Code sent! Please check your SMS.", "success");
+            }).catch((error) => {
+                // Error; SMS not sent
+                console.error("Error sending SMS", error);
+                ui.sendOtpBtn.disabled = false;
+
+                // Reset recaptcha
+                if (window.recaptchaVerifier && window.recaptchaVerifier.clear) {
+                    window.recaptchaVerifier.clear();
+                }
+
+                showMessage(`Error: ${error.message}`, "error");
+            });
+    });
+
+    // 2. Verify OTP
+    ui.verifyOtpBtn.addEventListener('click', function () {
+        const code = ui.otpInput.value.trim();
+        if (!code) {
+            showMessage("Please enter the verification code.", "error");
+            return;
+        }
+
+        ui.verifyOtpBtn.disabled = true;
+        showMessage("Verifying code...", "info");
+
+        if (window.confirmationResult) {
+            window.confirmationResult.confirm(code).then((result) => {
+                // User signed in successfully.
+                const user = result.user;
+                console.log("User signed in:", user);
+
+                // Get ID token
+                user.getIdToken().then((idToken) => {
+                    // Send token to backend to establish session
+                    document.getElementById('id_token').value = idToken;
+                    document.getElementById('hidden_user_type').value = ui.typeInput.value;
+                    document.getElementById('login-form').submit();
+                });
+
+            }).catch((error) => {
+                // User couldn't sign in (bad verification code?)
+                console.error("Error verifying code", error);
+                ui.verifyOtpBtn.disabled = false;
+                showMessage("Invalid code. Please try again.", "error");
+            });
+        }
+    });
+
+    // Retry / Back
+    ui.retryBtn.addEventListener('click', function () {
+        ui.otpSection.style.display = 'none';
+        ui.phoneSection.style.display = 'block';
+        ui.sendOtpBtn.disabled = false;
+        ui.otpInput.value = '';
+        showMessage("", "info"); // clear message
+    });
+
+    function showMessage(msg, type) {
+        ui.statusMsg.innerText = msg;
+        ui.statusMsg.style.display = 'block';
+
+        if (type === 'error') ui.statusMsg.style.color = '#dc3545';
+        else if (type === 'success') ui.statusMsg.style.color = '#28a745';
+        else ui.statusMsg.style.color = '#007bff';
+    }
+</script>
+{% endblock %}

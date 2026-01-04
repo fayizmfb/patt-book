@@ -45,46 +45,39 @@ def login():
     Unified login page for both retailers and customers
     """
     if request.method == 'POST':
-        phone_number = request.form.get('phone_number', '').strip()
-        user_type = request.form.get('user_type', 'retailer')  # 'retailer' or 'customer'
-        verification_code = request.form.get('verification_code', '').strip()
-
-        if not phone_number:
-            flash('Phone number is required!', 'error')
-            return render_template('login.html')
-
-        # Clean phone number format
-        if not phone_number.startswith('+'):
-            phone_number = '+' + phone_number
-
-        db = get_db()
-
-        try:
-            if verification_code:
-                # Verify OTP (simplified for demo)
-                if len(verification_code) == 6 and verification_code.isdigit():
+        # Check if this is a legacy/simplified request or Firebase Auth request
+        id_token = request.form.get('id_token')
+        
+        if id_token:
+            # Client-side Firebase Auth flow
+            from firebase_config import verify_firebase_token
+            
+            decoded_token = verify_firebase_token(id_token)
+            if decoded_token:
+                phone_number = decoded_token.get('phone_number')
+                user_type = request.form.get('user_type', 'retailer')
+                
+                db = get_db()
+                try:
                     # Check if user exists
                     user = db.execute(
-                        'SELECT id, name, user_type FROM users WHERE phone_number = ? AND user_type = ?',
-                        (phone_number, user_type)
+                        'SELECT id, name, user_type FROM users WHERE phone_number = ?',
+                        (phone_number,)
                     ).fetchone()
-
+                    
                     if user:
                         # Existing user - login
+                        # If user exists but trying to login as different type, warn or handle?
+                        # For now assume phone number unique per user
                         session['user_id'] = user['id']
                         session['user_type'] = user['user_type']
                         session['phone_number'] = phone_number
-
-                        # Update last login
-                        db.execute(
-                            'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?',
-                            (user['id'],)
-                        )
+                        
+                        db.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
                         db.commit()
-
+                        
                         flash('Login successful!', 'success')
-
-                        if user_type == 'retailer':
+                        if user['user_type'] == 'retailer':
                             return redirect(url_for('retailer_dashboard'))
                         else:
                             return redirect(url_for('customer_dashboard'))
@@ -92,24 +85,37 @@ def login():
                         # New user - redirect to onboarding
                         session['phone_number'] = phone_number
                         session['user_type'] = user_type
-
+                        
                         if user_type == 'retailer':
                             return redirect(url_for('retailer_onboarding'))
                         else:
                             return redirect(url_for('customer_onboarding'))
-                else:
-                    flash('Invalid verification code!', 'error')
+                finally:
+                    db.close()
             else:
-                # Send OTP (simplified - in production use Firebase)
-                # For demo, we'll just show the OTP input
-                flash('OTP sent to your phone number!', 'success')
+                flash('Authentication failed. Please try again.', 'error')
+                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
 
-        except Exception as e:
-            flash(f'Login error: {str(e)}', 'error')
-        finally:
-            db.close()
+        # Fallback to old flow if no id_token (or keep for backward compat for a moment)
+        phone_number = request.form.get('phone_number', '').strip()
+        user_type = request.form.get('user_type', 'retailer')
+        verification_code = request.form.get('verification_code', '').strip()
 
-    return render_template('login.html')
+        if not phone_number and not id_token:
+             flash('Phone number is required!', 'error')
+             from firebase_config import FIREBASE_CONFIG
+             return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+
+        # ... (Old simplified flow code removal or commented out) ...
+        # For now, let's return the simplified flow ONLY if strictly requested, 
+        # but realistically we want to force the new flow.
+        # But to avoid breaking if JS fails, we just re-render login.
+        
+        from firebase_config import FIREBASE_CONFIG
+        return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+
+    from firebase_config import FIREBASE_CONFIG
+    return render_template('login.html', firebase_config=FIREBASE_CONFIG)
 
 
 @app.route('/onboarding', methods=['GET', 'POST'])
@@ -1517,8 +1523,5 @@ def customer_retailer_detail(retailer_id):
 
 if __name__ == '__main__':
     # For local development
-    app.run(debug=True)
-else:
-    # For production deployment (Render, etc.)
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)

@@ -18,40 +18,53 @@ FIREBASE_CONFIG = {
     "databaseURL": os.getenv("FIREBASE_DATABASE_URL", "")  # Optional, for Realtime Database
 }
 
-# Initialize Firebase (disabled for compatibility - using simplified authentication mode)
-FIREBASE_AVAILABLE = False
-auth = None
-db = None
-print("Using simplified authentication mode (Firebase disabled for Python 3.14 compatibility).")
+# Initialize Firebase
+try:
+    import firebase_admin
+    from firebase_admin import credentials, auth as admin_auth, db as admin_db
+    
+    # Check if we have credentials to initialize
+    if not firebase_admin._apps:
+        # Use Application Default Credentials (ADC) or service account if available
+        # logic: try to find serviceAccountKey.json, else rely on ADC
+        if os.path.exists('serviceAccountKey.json'):
+            cred = credentials.Certificate('serviceAccountKey.json')
+            firebase_admin.initialize_app(cred, {
+                'databaseURL': FIREBASE_CONFIG['databaseURL'],
+                'storageBucket': FIREBASE_CONFIG['storageBucket']
+            })
+        else:
+             firebase_admin.initialize_app()
+
+    FIREBASE_AVAILABLE = True
+    auth = admin_auth
+    db = admin_db
+    print("Firebase initialized successfully.")
+except Exception as e:
+    FIREBASE_AVAILABLE = False
+    auth = None
+    db = None
+    print(f"Firebase initialization failed: {e}. Using simplified mode.")
 
 
-def verify_phone_otp(phone_number, verification_code):
+def verify_firebase_token(id_token):
     """
-    Verify phone OTP code with Firebase Authentication
+    Verify Firebase ID Token from client
     
     Args:
-        phone_number: User's phone number (with country code, e.g., +1234567890)
-        verification_code: OTP code sent to user's phone
+        id_token: The Firebase ID token string
     
     Returns:
-        dict: User data if successful, None if failed
+        dict: Decoded token claims (uid, phone_number, etc.) if valid, None otherwise
     """
-    try:
-        # Firebase phone auth verification
-        # Note: This is a simplified approach. In production, you'd handle the verification flow properly
-        # Firebase Phone Auth requires a verification ID first, then code verification
-        # For simplicity, we're using a basic approach here
-        
-        # In actual implementation, you need to:
-        # 1. Send verification code: auth.send_phone_verification_code(phone_number)
-        # 2. Verify code: auth.verify_phone_code(verification_id, verification_code)
-        
-        # This is a placeholder - you'll need to implement proper Firebase Phone Auth flow
-        # See Firebase documentation for complete implementation
-        
+    if not FIREBASE_AVAILABLE:
         return None
+
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return decoded_token
     except Exception as e:
-        print(f"Error verifying phone OTP: {str(e)}")
+        print(f"Error verifying Firebase ID token: {e}")
         return None
 
 
