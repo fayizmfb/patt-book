@@ -1,124 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}{{ retailer['store_name'] }} - Patt Book{% endblock %}
+{% block title %}Transaction History - {{ retailer['store_name'] }}{% endblock %}
 
 {% block content %}
 <div class="card">
-    <!-- Retailer Info -->
-    <div class="retailer-header">
+    <div style="text-align: center; margin-bottom: 30px;">
         {% if retailer['store_photo_url'] %}
-        <img src="{{ retailer['store_photo_url'] }}" alt="Store Photo" class="store-photo-large">
+        <img src="{{ retailer['store_photo_url'] }}" alt="Store"
+            style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid #ddd;">
         {% endif %}
-        <div class="retailer-details">
-            <h2>{{ retailer['store_name'] }}</h2>
-            <p class="phone">📞 {{ retailer['phone_number'] }}</p>
-            {% if retailer['store_address'] %}
-            <p class="address">📍 {{ retailer['store_address'] }}</p>
-            {% endif %}
-        </div>
-        <div class="outstanding-summary">
-            <div class="outstanding-amount">₹{{ "%.2f"|format(outstanding) }}</div>
-            <div class="outstanding-label">Outstanding Balance</div>
+        <h2 style="margin-top: 15px;">{{ retailer['store_name'] }}</h2>
+        <p style="color: #666;">{{ retailer['store_address'] }}</p>
+        <p style="color: #666;">Contact: {{ retailer['phone_number'] }}</p>
+
+        <div style="margin-top: 20px; font-size: 24px;">
+            Outstanding Balance:
+            <span style="color: {% if outstanding > 0 %}#e74c3c{% else %}#27ae60{% endif %}; font-weight: bold;">
+                ₹{{ "%.2f"|format(outstanding) }}
+            </span>
         </div>
     </div>
 
-    <!-- Transaction History -->
     <h3>Transaction History</h3>
     {% if transactions %}
     <table>
         <thead>
             <tr>
                 <th>Date</th>
-                <th>Type</th>
-                <th>Amount</th>
                 <th>Description</th>
+                <th class="text-right">Amount</th>
+                <th class="text-right">Type</th>
             </tr>
         </thead>
         <tbody>
-            {% for transaction in transactions %}
-            <tr>
-                <td>{{ transaction['date'] }}</td>
-                <td>
-                    {% if transaction['type'] == 'credit' %}
-                        <span class="badge badge-danger">Credit</span>
-                    {% else %}
-                        <span class="badge badge-success">Payment</span>
-                    {% endif %}
-                </td>
+            {% for t in transactions %}
+            <tr style="background-color: {% if t['type'] == 'PAYMENT' %}#e8f8f5{% else %}white{% endif %}">
+                <td>{{ t['date'] }}</td>
+                <td>{{ t['description'] or '-' }}</td>
+                <td class="text-right">₹{{ "%.2f"|format(t['amount']) }}</td>
                 <td class="text-right">
-                    {% if transaction['type'] == 'credit' %}
-                        <span style="color: #e74c3c;">₹{{ "%.2f"|format(transaction['amount']) }}</span>
+                    {% if t['type'] == 'CREDIT' %}
+                    <span class="badge badge-danger">CREDIT</span>
                     {% else %}
-                        <span style="color: #27ae60;">₹{{ "%.2f"|format(transaction['amount']) }}</span>
+                    <span class="badge" style="background-color: #27ae60; color: white;">PAYMENT</span>
                     {% endif %}
                 </td>
-                <td>{{ transaction['description'] or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% else %}
-    <div style="text-align: center; padding: 40px; color: #666;">
-        <p>No transactions yet with this retailer.</p>
-    </div>
+    <p style="text-align: center; color: #666; padding: 20px;">No transactions found.</p>
     {% endif %}
 
-    <!-- Actions -->
     <div class="actions" style="margin-top: 30px;">
-        {% if outstanding > 0 %}
-        <a href="{{ url_for('submit_payment') }}" class="btn btn-success">💰 Submit Payment</a>
-        {% endif %}
         <a href="{{ url_for('customer_dashboard') }}" class="btn">Back to Dashboard</a>
     </div>
 </div>
-
-<style>
-.retailer-header {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 30px;
-    padding: 20px;
-    background: #f8f9fa;
-    border-radius: 8px;
-}
-
-.store-photo-large {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #e9ecef;
-}
-
-.retailer-details {
-    flex: 1;
-}
-
-.retailer-details h2 {
-    margin: 0 0 10px 0;
-    color: #2c3e50;
-}
-
-.phone, .address {
-    margin: 5px 0;
-    color: #666;
-}
-
-.outstanding-summary {
-    text-align: right;
-}
-
-.outstanding-amount {
-    font-size: 24px;
-    font-weight: bold;
-    color: #e74c3c;
-    margin-bottom: 5px;
-}
-
-.outstanding-label {
-    color: #666;
-    font-size: 14px;
-}
-</style>
 {% endblock %}

@@ -457,10 +457,11 @@ def customer_dashboard():
 
     try:
         # Get outstanding amounts per retailer
+        # Fix: r.user_id does not exist, use r.id
         outstanding_by_retailer = db.execute(
             '''
             SELECT
-                r.user_id as retailer_id,
+                r.id as retailer_id,
                 rp.store_name,
                 rp.store_photo_url,
                 COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) as outstanding
@@ -469,7 +470,7 @@ def customer_dashboard():
             LEFT JOIN credits c ON c.retailer_id = r.id AND c.customer_id = ?
             LEFT JOIN payments p ON p.customer_id = c.customer_id AND p.retailer_id = r.id
             WHERE c.customer_id = ? OR c.customer_id IS NULL
-            GROUP BY r.user_id, rp.store_name, rp.store_photo_url
+            GROUP BY r.id, rp.store_name, rp.store_photo_url
             HAVING outstanding > 0
             ORDER BY outstanding DESC
             ''',
@@ -480,6 +481,7 @@ def customer_dashboard():
         total_outstanding = sum(row['outstanding'] for row in outstanding_by_retailer)
 
     except Exception as e:
+        print(f"Error in customer_dashboard: {e}")
         flash(f'Error loading dashboard: {str(e)}', 'error')
         outstanding_by_retailer = []
         total_outstanding = 0
@@ -491,6 +493,75 @@ def customer_dashboard():
                          total_outstanding=total_outstanding)
 
 
+@app.route('/customer/retailer/<int:retailer_id>')
+def customer_retailer_detail(retailer_id):
+    """
+    View details for a specific retailer from customer perspective
+    Shows ledger/transactions only for this retailer
+    """
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    if session.get('user_type') != 'customer':
+        flash('Access denied', 'error')
+        return redirect(url_for('login'))
+        
+    db = get_db()
+    customer_id = session['user_id']
+    
+    try:
+        # Get retailer details
+        retailer = db.execute(
+            'SELECT rp.*, u.phone_number FROM retailer_profiles rp JOIN users u ON rp.user_id = u.id WHERE u.id = ?',
+            (retailer_id,)
+        ).fetchone()
+        
+        if not retailer:
+            flash('Retailer not found', 'error')
+            return redirect(url_for('customer_dashboard'))
+
+        # Get combined history (Validation: credits and payments)
+        # We need to construct a unified list manually or via UNION
+        
+        credits = db.execute(
+            'SELECT id, amount, entry_date as date, notes as description, "CREDIT" as type, created_at FROM credits WHERE customer_id = ? AND retailer_id = ?',
+            (customer_id, retailer_id)
+        ).fetchall()
+        
+        payments = db.execute(
+            'SELECT id, amount, payment_date as date, "Payment" as description, "PAYMENT" as type, created_at FROM payments WHERE customer_id = ? AND retailer_id = ?',
+            (customer_id, retailer_id)
+        ).fetchall()
+        
+        # Merge and sort
+        transactions = []
+        for c in credits:
+            transactions.append(dict(c))
+        for p in payments:
+            transactions.append(dict(p))
+            
+        # Sort by date desc, then created_at desc
+        transactions.sort(key=lambda x: (x['date'], x['created_at']), reverse=True)
+        
+        # Calculate outstanding for this retailer
+        credit_total = sum(t['amount'] for t in transactions if t['type'] == 'CREDIT')
+        payment_total = sum(t['amount'] for t in transactions if t['type'] == 'PAYMENT')
+        outstanding = credit_total - payment_total
+        
+    except Exception as e:
+        print(f"Error in customer_retailer_detail: {e}")
+        flash('Error loading retailer details.', 'error')
+        retailer = None
+        transactions = []
+        outstanding = 0
+    finally:
+        db.close()
+        
+    return render_template('customer_retailer_detail.html', 
+                         retailer=retailer, 
+                         transactions=transactions, 
+                         outstanding=outstanding)
+
+
 # ============================================================================
 # CUSTOMER MASTER OPERATIONS
 # ============================================================================
@@ -499,7 +570,10 @@ def customer_dashboard():
 
 def retailer_customers():
     """Show list of customers for the retailer"""
-    if 'user_id' not in session:
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    if session.get('user_type') != 'retailer':
+        flash('Access denied', 'error')
         return redirect(url_for('login'))
         
     db = get_db()
@@ -542,6 +616,12 @@ def retailer_customers():
 
 def add_customer():
     """Add a new customer"""
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    if session.get('user_type') != 'retailer':
+        flash('Access denied', 'error')
+        return redirect(url_for('login'))
+
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         phone = request.form.get('phone', '').strip()
@@ -1447,6 +1527,12 @@ def submit_payment():
 
 def payment_requests():
     """Retailer views pending payment requests"""
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    if session.get('user_type') != 'retailer':
+        flash('Access denied', 'error')
+        return redirect(url_for('login'))
+
     db = get_db()
     retailer_id = session['user_id']
 
