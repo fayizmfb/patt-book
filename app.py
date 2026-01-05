@@ -505,24 +505,35 @@ def retailer_customers():
     db = get_db()
     retailer_id = session['user_id']
 
-    customers = db.execute(
-        '''
-        SELECT
-            u.id,
-            u.name,
-            u.phone,
-            COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) as outstanding
-        FROM users u
-        LEFT JOIN credits c ON c.customer_id = u.id AND c.retailer_id = ?
-        LEFT JOIN payments p ON p.customer_id = u.id AND p.retailer_id = ?
-        WHERE u.user_type = 'customer'
-        GROUP BY u.id, u.name, u.phone
-        HAVING outstanding > 0 OR u.id IN (SELECT customer_id FROM credits WHERE retailer_id = ?)
-        ORDER BY u.name
-        ''',
-        (retailer_id, retailer_id, retailer_id)
-    ).fetchall()
-    db.close()
+    customers = []
+    try:
+        # Check if users table has phone or phone_number column (Validation)
+        # However, relying on schema, it is phone_number.
+        
+        customers = db.execute(
+            '''
+            SELECT
+                u.id,
+                u.name,
+                u.phone_number as phone,
+                COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) as outstanding
+            FROM users u
+            LEFT JOIN credits c ON c.customer_id = u.id AND c.retailer_id = ?
+            LEFT JOIN payments p ON p.customer_id = u.id AND p.retailer_id = ?
+            WHERE u.user_type = 'customer'
+            GROUP BY u.id, u.name, u.phone_number
+            HAVING outstanding > 0 OR u.id IN (SELECT customer_id FROM credits WHERE retailer_id = ?)
+            ORDER BY u.name
+            ''',
+            (retailer_id, retailer_id, retailer_id)
+        ).fetchall()
+    except Exception as e:
+        print(f"Error fetching customers: {e}")
+        # Log to stderr or monitoring system in production
+        flash("Error loading customer list. Please try again.", "error")
+        customers = []
+    finally:
+        db.close()
 
     return render_template('retailer_customers.html', customers=customers)
 
