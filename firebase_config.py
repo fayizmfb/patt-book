@@ -25,15 +25,30 @@ try:
     
     # Check if we have credentials to initialize
     if not firebase_admin._apps:
-        # Use Application Default Credentials (ADC) or service account if available
-        # logic: try to find serviceAccountKey.json, else rely on ADC
-        if os.path.exists('serviceAccountKey.json'):
-            cred = credentials.Certificate('serviceAccountKey.json')
+        # Priority 1: Environment Variable (Standard for Render/Cloud Run)
+        # GOOGLE_APPLICATION_CREDENTIALS env var is automatically checked by initialize_app()
+        # if using application_default(), but here we want to be explicit or handle specific files.
+        
+        # Check specific Render Secret path or local file
+        service_account_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+        
+        # If not set, check for standard Render secret location
+        if not service_account_path and os.path.exists('/etc/secrets/serviceAccountKey.json'):
+             service_account_path = '/etc/secrets/serviceAccountKey.json'
+             
+        # If still not set, check for local file (for local dev)
+        if not service_account_path and os.path.exists('serviceAccountKey.json'):
+            service_account_path = 'serviceAccountKey.json'
+
+        if service_account_path and os.path.exists(service_account_path):
+            print(f"Initializing Firebase with service account: {service_account_path}")
+            cred = credentials.Certificate(service_account_path)
             firebase_admin.initialize_app(cred, {
                 'databaseURL': FIREBASE_CONFIG['databaseURL'],
                 'storageBucket': FIREBASE_CONFIG['storageBucket']
             })
         else:
+             print("No service account found. Trying Application Default Credentials or unauthenticated access.")
              firebase_admin.initialize_app()
 
     FIREBASE_AVAILABLE = True
