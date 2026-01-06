@@ -401,7 +401,7 @@ def retailer_dashboard():
 
         # Get total outstanding
         total_outstanding = db.execute(
-            'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id WHERE c.retailer_id = ?',
+            'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id AND c.retailer_id = p.retailer_id WHERE c.retailer_id = ?',
             (retailer_id,)
         ).fetchone()[0]
 
