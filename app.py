@@ -594,10 +594,9 @@ def retailer_customers():
             LEFT JOIN payments p ON p.customer_id = u.id AND p.retailer_id = ?
             WHERE u.user_type = 'customer'
             GROUP BY u.id, u.name, u.phone_number
-            HAVING outstanding > 0 OR u.id IN (SELECT customer_id FROM credits WHERE retailer_id = ?)
             ORDER BY u.name
             """,
-            (retailer_id, retailer_id, retailer_id)
+            (retailer_id, retailer_id)
         ).fetchall()
         
         print(f"Successfully fetched {len(customers)} customers for retailer {retailer_id}")
