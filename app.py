@@ -511,42 +511,43 @@ def customer_retailer_detail(retailer_id):
     try:
         # Get retailer details
         retailer = db.execute(
-            'SELECT rp.*, u.phone_number FROM retailer_profiles rp JOIN users u ON rp.user_id = u.id WHERE u.id = ?',
-            (retailer_id,)
+            'SELECT u.*, rp.store_name, rp.store_address, rp.store_photo_url FROM users u JOIN retailer_profiles rp ON u.id = rp.user_id WHERE u.id = ? AND u.user_type = ?',
+            (retailer_id, 'retailer')
         ).fetchone()
-        
+
         if not retailer:
-            flash('Retailer not found', 'error')
+            flash('Retailer not found!', 'error')
             return redirect(url_for('customer_dashboard'))
 
-        # Get combined history (Validation: credits and payments)
-        # We need to construct a unified list manually or via UNION
-        
-        credits = db.execute(
-            'SELECT id, amount, entry_date as date, notes as description, "CREDIT" as type, created_at FROM credits WHERE customer_id = ? AND retailer_id = ?',
-            (customer_id, retailer_id)
+        # Get transaction history
+        transactions = db.execute(
+            '''
+            SELECT
+                'credit' as type,
+                c.amount,
+                c.entry_date as date,
+                c.notes as description
+            FROM credits c
+            WHERE c.customer_id = ? AND c.retailer_id = ?
+            UNION ALL
+            SELECT
+                'payment' as type,
+                p.amount,
+                p.payment_date as date,
+                'Payment received' as description
+            FROM payments p
+            WHERE p.customer_id = ? AND p.retailer_id = ?
+            ORDER BY date DESC
+            ''',
+            (customer_id, retailer_id, customer_id, retailer_id)
         ).fetchall()
-        
-        payments = db.execute(
-            'SELECT id, amount, payment_date as date, "Payment" as description, "PAYMENT" as type, created_at FROM payments WHERE customer_id = ? AND retailer_id = ?',
+
+        # Get current outstanding balance
+        outstanding = db.execute(
+            'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id AND c.retailer_id = p.retailer_id WHERE c.customer_id = ? AND c.retailer_id = ?',
             (customer_id, retailer_id)
-        ).fetchall()
-        
-        # Merge and sort
-        transactions = []
-        for c in credits:
-            transactions.append(dict(c))
-        for p in payments:
-            transactions.append(dict(p))
-            
-        # Sort by date desc, then created_at desc
-        transactions.sort(key=lambda x: (x['date'], x['created_at']), reverse=True)
-        
-        # Calculate outstanding for this retailer
-        credit_total = sum(t['amount'] for t in transactions if t['type'] == 'CREDIT')
-        payment_total = sum(t['amount'] for t in transactions if t['type'] == 'PAYMENT')
-        outstanding = credit_total - payment_total
-        
+        ).fetchone()[0]
+
     except Exception as e:
         print(f"Error in customer_retailer_detail: {e}")
         flash('Error loading retailer details.', 'error')
@@ -1669,56 +1670,8 @@ def customer_timeline(customer_id):
     return render_template('customer_timeline.html', customer=customer, timeline=timeline, outstanding=outstanding)
 
 
-@app.route('/customer/retailer/<int:retailer_id>')
 
-def customer_retailer_detail(retailer_id):
-    """Customer views their transaction history with a specific retailer"""
-    db = get_db()
-    customer_id = session['user_id']
 
-    # Get retailer details
-    retailer = db.execute(
-        'SELECT u.*, rp.store_name, rp.store_address, rp.store_photo_url FROM users u JOIN retailer_profiles rp ON u.id = rp.user_id WHERE u.id = ? AND u.user_type = ?',
-        (retailer_id, 'retailer')
-    ).fetchone()
-
-    if not retailer:
-        flash('Retailer not found!', 'error')
-        db.close()
-        return redirect(url_for('customer_dashboard'))
-
-    # Get transaction history
-    transactions = db.execute(
-        '''
-        SELECT
-            'credit' as type,
-            c.amount,
-            c.entry_date as date,
-            c.notes as description
-        FROM credits c
-        WHERE c.customer_id = ? AND c.retailer_id = ?
-        UNION ALL
-        SELECT
-            'payment' as type,
-            p.amount,
-            p.payment_date as date,
-            'Payment received' as description
-        FROM payments p
-        WHERE p.customer_id = ? AND p.retailer_id = ?
-        ORDER BY date DESC
-        ''',
-        (customer_id, retailer_id, customer_id, retailer_id)
-    ).fetchall()
-
-    # Get current outstanding balance
-    outstanding = db.execute(
-        'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id AND c.retailer_id = p.retailer_id WHERE c.customer_id = ? AND c.retailer_id = ?',
-        (customer_id, retailer_id)
-    ).fetchone()[0]
-
-    db.close()
-
-    return render_template('customer_retailer_detail.html', retailer=retailer, transactions=transactions, outstanding=outstanding)
 
 
 if __name__ == '__main__':
