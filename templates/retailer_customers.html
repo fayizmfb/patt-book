@@ -30,9 +30,6 @@
                     </span>
                 </td>
                 <td>
-                    <a href="{{ url_for('add_credit', customer_id=customer['id']) }}" class="btn btn-success btn-sm">
-                        💰 Add Credit
-                    </a>
                     <a href="{{ url_for('customer_timeline', customer_id=customer['id']) }}" class="btn btn-info btn-sm">
                         📋 View Details
                     </a>
@@ -44,7 +41,6 @@
     {% else %}
     <div style="text-align: center; padding: 60px 20px; color: #666;">
         <p>No customers yet. Start by adding your first customer!</p>
-        <a href="{{ url_for('add_customer') }}" class="btn btn-primary">Add First Customer</a>
     </div>
     {% endif %}
 

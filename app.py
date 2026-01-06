@@ -568,7 +568,6 @@ def customer_retailer_detail(retailer_id):
 # ============================================================================
 
 @app.route('/retailer/customers')
-
 def retailer_customers():
     """Show list of customers for the retailer"""
     if not is_user_logged_in():
@@ -579,14 +578,12 @@ def retailer_customers():
         
     db = get_db()
     retailer_id = session['user_id']
-
     customers = []
+    
     try:
-        # Check if users table has phone or phone_number column (Validation)
-        # However, relying on schema, it is phone_number.
+        print(f"Fetching customers for retailer_id: {retailer_id}")
         
-        customers = db.execute(
-            '''
+        customers = db.execute("""
             SELECT
                 u.id,
                 u.name,
@@ -599,12 +596,16 @@ def retailer_customers():
             GROUP BY u.id, u.name, u.phone_number
             HAVING outstanding > 0 OR u.id IN (SELECT customer_id FROM credits WHERE retailer_id = ?)
             ORDER BY u.name
-            ''',
+            """,
             (retailer_id, retailer_id, retailer_id)
         ).fetchall()
+        
+        print(f"Successfully fetched {len(customers)} customers for retailer {retailer_id}")
+        
     except Exception as e:
-        print(f"Error fetching customers: {e}")
-        # Log to stderr or monitoring system in production
+        print(f"Error fetching customers for retailer {retailer_id}: {e}")
+        import traceback
+        traceback.print_exc()
         flash("Error loading customer list. Please try again.", "error")
         customers = []
     finally:
@@ -614,7 +615,6 @@ def retailer_customers():
 
 
 @app.route('/retailer/customer/add', methods=['GET', 'POST'])
-
 def add_customer():
     """Add a new customer"""
     if not is_user_logged_in():
@@ -636,6 +636,7 @@ def add_customer():
             phone = '+' + phone
 
         db = get_db()
+        retailer_id = session['user_id']
         try:
             # Check if customer already exists
             existing = db.execute(
@@ -644,22 +645,26 @@ def add_customer():
             ).fetchone()
 
             if existing:
+                print(f"Customer creation failed: Phone {phone} already exists for retailer {retailer_id}")
                 flash('A customer with this phone number already exists!', 'error')
                 db.close()
                 return render_template('add_customer.html')
 
             # Create new customer
-            db.execute(
+            cursor = db.execute(
                 'INSERT INTO users (phone_number, user_type, name) VALUES (?, ?, ?)',
                 (phone, 'customer', name)
             )
+            customer_id = cursor.lastrowid
             db.commit()
-
+            
+            print(f"Customer created successfully: ID={customer_id}, Name={name}, Phone={phone}, Retailer={retailer_id}")
             flash('Customer added successfully!', 'success')
             return redirect(url_for('retailer_customers'))
 
         except Exception as e:
             db.rollback()
+            print(f"Error adding customer: {str(e)} - Retailer: {retailer_id}, Name: {name}, Phone: {phone}")
             flash(f'Error adding customer: {str(e)}', 'error')
         finally:
             db.close()
@@ -814,83 +819,26 @@ def view_customer(customer_id):
 # CREDIT ENTRY OPERATIONS
 # ============================================================================
 
+# TEMPORARILY DISABLED - Fixing stability issues
+# @app.route('/credit/add', methods=['GET', 'POST'])
+# @app.route('/credit/add/<int:customer_id>', methods=['GET', 'POST'])
+# def add_credit(customer_id=None):
+#     """Add a credit entry for a customer - DISABLED TEMPORARILY"""
+#     flash('Credit feature is temporarily unavailable. Please use Add Payment instead.', 'warning')
+#     return redirect(url_for('retailer_dashboard'))
+
 @app.route('/credit/add', methods=['GET', 'POST'])
 @app.route('/credit/add/<int:customer_id>', methods=['GET', 'POST'])
-
 def add_credit(customer_id=None):
-    """Add a credit entry for a customer"""
+    """Add a credit entry for customer - TEMPORARILY DISABLED"""
     if not is_user_logged_in():
         return redirect(url_for('login'))
     if session.get('user_type') != 'retailer':
         flash('Access denied. Only retailers can add credits.', 'error')
         return redirect(url_for('dashboard'))
     
-    db = get_db()
-    retailer_id = session['user_id']
-    
-    if request.method == 'POST':
-        customer_id = request.form['customer_id']
-        amount = float(request.form['amount'])
-        notes = request.form.get('notes', '').strip()
-        entry_date = datetime.now().date()
-        
-        try:
-            # Insert credit entry linked to retailer
-            db.execute(
-                'INSERT INTO credits (customer_id, retailer_id, amount, entry_date, notes) VALUES (?, ?, ?, ?, ?)',
-                (customer_id, retailer_id, amount, entry_date, notes)
-            )
-            db.commit()
-            
-            # Calculate total outstanding balance after this entry
-            total_outstanding = db.execute(
-                'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id AND c.retailer_id = p.retailer_id WHERE c.customer_id = ? AND c.retailer_id = ?',
-                (customer_id, retailer_id)
-            ).fetchone()[0]
-            
-            # Get retailer and customer details for notification
-            retailer = db.execute(
-                'SELECT rp.store_name FROM retailer_profiles rp WHERE rp.user_id = ?',
-                (retailer_id,)
-            ).fetchone()
-            
-            # Send push notification to customer
-            from push_notifications import send_push_notification, prepare_credit_notification
-            title, body = prepare_credit_notification(
-                retailer['store_name'],
-                amount,
-                total_outstanding
-            )
-            send_push_notification(customer_id, title, body)
-            
-            # Add timeline event
-            db.execute(
-                'INSERT INTO timeline_events (customer_id, retailer_id, event_type, amount, description) VALUES (?, ?, ?, ?, ?)',
-                (customer_id, retailer_id, 'credit_added', amount, notes or 'Credit entry')
-            )
-            db.commit()
-            
-            flash(f'Credit entry of ₹{amount:.2f} added successfully!', 'success')
-            return redirect(url_for('retailer_dashboard'))
-            
-        except Exception as e:
-            db.rollback()
-            flash(f'Error adding credit entry: {str(e)}', 'error')
-        finally:
-            db.close()
-    
-    # GET request - show form
-    customers = db.execute(
-        'SELECT u.id, u.name, u.phone FROM users u WHERE u.user_type = ? ORDER BY u.name',
-        ('customer',)
-    ).fetchall()
-    db.close()
-
-    selected_customer = None
-    if customer_id:
-        selected_customer = next((c for c in customers if c['id'] == customer_id), None)
-
-    return render_template('add_credit.html', customers=customers, selected_customer=selected_customer)
+    flash('Credit feature is temporarily unavailable. Please use Add Payment to record transactions.', 'warning')
+    return redirect(url_for('retailer_dashboard'))
 
 
 # ============================================================================
@@ -921,14 +869,14 @@ def add_payment(customer_id=None):
             amount = float(request.form['amount'])
         except (ValueError, KeyError) as e:
             flash('Invalid form data. Please check your input.', 'error')
-            customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+            customers = db.execute('SELECT id, name FROM users WHERE user_type = ? ORDER BY name', ('customer',)).fetchall()
             return render_template('add_payment.html', customers=customers)
         
         # Validate customer exists
-        customer = db.execute('SELECT id, name FROM customers WHERE id = ?', (customer_id,)).fetchone()
+        customer = db.execute('SELECT id, name FROM users WHERE id = ? AND user_type = ?', (customer_id, 'customer')).fetchone()
         if not customer:
             flash('Selected customer not found.', 'error')
-            customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+            customers = db.execute('SELECT id, name FROM users WHERE user_type = ? ORDER BY name', ('customer',)).fetchall()
             return render_template('add_payment.html', customers=customers)
         
         # Calculate current outstanding balance
@@ -948,44 +896,40 @@ def add_payment(customer_id=None):
         # Prevent negative balance
         if amount > outstanding_balance:
             flash(f'Payment amount ({amount}) exceeds outstanding balance ({outstanding_balance}) for your store!', 'error')
-            customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+            customers = db.execute('SELECT id, name FROM users WHERE user_type = ? ORDER BY name', ('customer',)).fetchall()
             return render_template('add_payment.html', customers=customers)
         
         try:
             payment_date = datetime.now().date()
-            # Insert with retailer_id
+            
+            print(f"Processing payment: customer_id={customer_id}, amount={amount}, retailer_id={retailer_id}")
+            
+            # Insert payment with retailer_id
             db.execute(
                 'INSERT INTO payments (customer_id, retailer_id, amount, payment_date) VALUES (?, ?, ?, ?)',
                 (customer_id, retailer_id, amount, payment_date)
             )
-            db.commit()
             
-            # Create transaction record for the payment (Legacy/Deprecated? Keeping for safety but referencing retailer)
-            # IMPORTANT: The transactions table schema also likely needs retailer_id if it's used for unified views. 
-            # However, looking at the provided logs, the failure was on `payments` join.
-            # I will assume `transactions` might be less critical or used differently, but for consistency:
-            # The previous code inserted into 'transactions' table which has (customer_id, type, amount, description).
-            # It DOES NOT have retailer_id based on previous file views. 
-            # I will keep it as is to avoid breaking 'transactions' table unless I see an error there too.
-            # But the 'View Customer' logic used 'transactions' table. If that view is retailer-agnostic, it's fine.
-            # If it's retailer specific, it's broken too.
-            # Start strict: Fix payments first.
-            
+            # Add timeline event for better tracking
             db.execute(
-                'INSERT INTO transactions (customer_id, type, amount, description) VALUES (?, ?, ?, ?)',
-                (customer_id, 'PAYMENT', amount, 'Payment received')
+                'INSERT INTO timeline_events (customer_id, retailer_id, event_type, amount, description) VALUES (?, ?, ?, ?, ?)',
+                (customer_id, retailer_id, 'payment_added', amount, f'Payment of ₹{amount:.2f} received')
             )
+            
             db.commit()
             
-            flash(f'Payment of {amount} recorded successfully!', 'success')
-            # Instead of redirecting, show success page with action buttons
-            customer = db.execute(
-                'SELECT id, name FROM customers WHERE id = ?',
-                (customer_id,)
-            ).fetchone()
-            return render_template('payment_success.html', customer=customer, amount=amount)
+            # Calculate new outstanding balance
+            new_outstanding = outstanding_balance - amount
+            print(f"Payment recorded successfully. New outstanding: ₹{new_outstanding:.2f}")
+            
+            flash(f'Payment of ₹{amount:.2f} recorded successfully! New outstanding balance: ₹{new_outstanding:.2f}', 'success')
+            return redirect(url_for('retailer_customers'))
+            
         except Exception as e:
             db.rollback()
+            print(f"Error adding payment: {e}")
+            import traceback
+            traceback.print_exc()
             flash(f'Error adding payment: {str(e)}', 'error')
         finally:
             db.close()
@@ -994,13 +938,13 @@ def add_payment(customer_id=None):
     try:
         # Show only customers relevant to this retailer (optional optimization, but safer)
         # For now, keeping original logic to show all customers, but future optimization could filter.
-        customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+        customers = db.execute('SELECT id, name FROM users WHERE user_type = ? ORDER BY name', ('customer',)).fetchall()
         
         selected_customer = None
         if customer_id:
             selected_customer = db.execute(
-                'SELECT id, name FROM customers WHERE id = ?',
-                (customer_id,)
+                'SELECT id, name FROM users WHERE id = ? AND user_type = ?',
+                (customer_id, 'customer')
             ).fetchone()
 
         return render_template('add_payment.html', customers=customers, selected_customer=selected_customer)
@@ -1010,8 +954,6 @@ def add_payment(customer_id=None):
 
 # ============================================================================
 # OVERDUE DETECTION
-# ============================================================================
-
 # ============================================================================
 # ============================================================================
 # CUSTOMER LEDGER
@@ -1548,149 +1490,81 @@ def submit_payment():
 
 
 @app.route('/retailer/payment-requests')
-
 def payment_requests():
-    """Retailer views pending payment requests"""
+    """Retailer views pending payment requests - TEMPORARILY DISABLED"""
     if not is_user_logged_in():
         return redirect(url_for('login'))
     if session.get('user_type') != 'retailer':
         flash('Access denied', 'error')
         return redirect(url_for('login'))
-
-    db = get_db()
-    retailer_id = session['user_id']
-
-    requests = db.execute(
-        '''
-        SELECT
-            pr.id,
-            pr.amount,
-            pr.payment_mode,
-            pr.notes,
-            pr.submitted_at,
-            u.name as customer_name,
-            u.phone as customer_phone
-        FROM payment_requests pr
-        JOIN users u ON pr.customer_id = u.id
-        WHERE pr.retailer_id = ? AND pr.status = 'pending'
-        ORDER BY pr.submitted_at DESC
-        ''',
-        (retailer_id,)
-    ).fetchall()
-    db.close()
-
-    return render_template('payment_requests.html', requests=requests)
+    
+    flash('Payment Requests feature is temporarily unavailable.', 'warning')
+    return redirect(url_for('retailer_dashboard'))
 
 
 @app.route('/retailer/payment-request/<int:request_id>/<action>', methods=['POST'])
-
 def process_payment_request(request_id, action):
-    """Retailer confirms or rejects a payment request"""
-    if action not in ['confirm', 'reject']:
-        flash('Invalid action!', 'error')
-        return redirect(url_for('payment_requests'))
-
-    db = get_db()
-    retailer_id = session['user_id']
-
-    try:
-        # Get the payment request
-        request_data = db.execute(
-            'SELECT * FROM payment_requests WHERE id = ? AND retailer_id = ? AND status = ?',
-            (request_id, retailer_id, 'pending')
-        ).fetchone()
-
-        if not request_data:
-            flash('Payment request not found!', 'error')
-            db.close()
-            return redirect(url_for('payment_requests'))
-
-        if action == 'confirm':
-            # Add payment entry
-            db.execute(
-                'INSERT INTO payments (customer_id, retailer_id, amount, payment_date) VALUES (?, ?, ?, ?)',
-                (request_data['customer_id'], retailer_id, request_data['amount'], datetime.now().date())
-            )
-
-            # Update request status
-            db.execute(
-                'UPDATE payment_requests SET status = ?, processed_at = ?, processed_by = ? WHERE id = ?',
-                ('confirmed', datetime.now(), retailer_id, request_id)
-            )
-
-            # Send push notification to customer
-            from push_notifications import send_push_notification, prepare_payment_confirmed_notification
-            retailer = db.execute('SELECT rp.store_name FROM retailer_profiles rp WHERE rp.user_id = ?', (retailer_id,)).fetchone()
-            title, body = prepare_payment_confirmed_notification(retailer['store_name'], request_data['amount'])
-            send_push_notification(request_data['customer_id'], title, body)
-
-            # Add timeline event
-            db.execute(
-                'INSERT INTO timeline_events (customer_id, retailer_id, event_type, amount, description) VALUES (?, ?, ?, ?, ?)',
-                (request_data['customer_id'], retailer_id, 'payment_confirmed', request_data['amount'], f'Payment confirmed via {request_data["payment_mode"]}')
-            )
-
-            flash('Payment confirmed successfully!', 'success')
-
-        else:  # reject
-            rejection_reason = request.form.get('rejection_reason', '').strip()
-            db.execute(
-                'UPDATE payment_requests SET status = ?, processed_at = ?, processed_by = ?, rejection_reason = ? WHERE id = ?',
-                ('rejected', datetime.now(), retailer_id, rejection_reason, request_id)
-            )
-
-            # Add timeline event
-            db.execute(
-                'INSERT INTO timeline_events (customer_id, retailer_id, event_type, amount, description) VALUES (?, ?, ?, ?, ?)',
-                (request_data['customer_id'], retailer_id, 'payment_rejected', request_data['amount'], f'Payment rejected: {rejection_reason}')
-            )
-
-            flash('Payment request rejected!', 'warning')
-
-        db.commit()
-
-    except Exception as e:
-        db.rollback()
-        flash(f'Error processing payment request: {str(e)}', 'error')
-    finally:
-        db.close()
-
-    return redirect(url_for('payment_requests'))
+    """Retailer confirms or rejects a payment request - TEMPORARILY DISABLED"""
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    if session.get('user_type') != 'retailer':
+        flash('Access denied', 'error')
+        return redirect(url_for('login'))
+    
+    flash('Payment Requests feature is temporarily unavailable.', 'warning')
+    return redirect(url_for('retailer_dashboard'))
 
 
 @app.route('/retailer/customer/<int:customer_id>')
-
 def customer_timeline(customer_id):
     """Retailer views customer timeline and details"""
+    if not is_user_logged_in():
+        return redirect(url_for('login'))
+    if session.get('user_type') != 'retailer':
+        flash('Access denied', 'error')
+        return redirect(url_for('login'))
+        
     db = get_db()
     retailer_id = session['user_id']
+    
+    try:
+        print(f"Fetching timeline for customer_id: {customer_id}, retailer_id: {retailer_id}")
+        
+        # Get customer details
+        customer = db.execute('SELECT * FROM users WHERE id = ? AND user_type = ?', (customer_id, 'customer')).fetchone()
+        if not customer:
+            print(f"Customer not found: {customer_id} for retailer {retailer_id}")
+            flash('Customer not found!', 'error')
+            return redirect(url_for('retailer_customers'))
 
-    # Get customer details
-    customer = db.execute('SELECT * FROM users WHERE id = ? AND user_type = ?', (customer_id, 'customer')).fetchone()
-    if not customer:
-        flash('Customer not found!', 'error')
-        db.close()
+        # Get timeline events
+        timeline = db.execute(
+            '''
+            SELECT * FROM timeline_events
+            WHERE customer_id = ? AND retailer_id = ?
+            ORDER BY created_at DESC
+            ''',
+            (customer_id, retailer_id)
+        ).fetchall()
+
+        # Get current outstanding balance
+        outstanding = db.execute(
+            'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id AND c.retailer_id = p.retailer_id WHERE c.customer_id = ? AND c.retailer_id = ?',
+            (customer_id, retailer_id)
+        ).fetchone()[0]
+        
+        print(f"Timeline loaded for customer {customer_id}: {len(timeline)} events, outstanding: {outstanding}")
+        
+        return render_template('customer_timeline.html', customer=customer, timeline=timeline, outstanding=outstanding)
+        
+    except Exception as e:
+        print(f"Error loading customer timeline: {e}")
+        import traceback
+        traceback.print_exc()
+        flash('Error loading customer details. Please try again.', 'error')
         return redirect(url_for('retailer_customers'))
-
-    # Get timeline events
-    timeline = db.execute(
-        '''
-        SELECT * FROM timeline_events
-        WHERE customer_id = ? AND retailer_id = ?
-        ORDER BY created_at DESC
-        ''',
-        (customer_id, retailer_id)
-    ).fetchall()
-
-    # Get current outstanding balance
-    outstanding = db.execute(
-        'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id AND c.retailer_id = p.retailer_id WHERE c.customer_id = ? AND c.retailer_id = ?',
-        (customer_id, retailer_id)
-    ).fetchone()[0]
-
-    db.close()
-
-    return render_template('customer_timeline.html', customer=customer, timeline=timeline, outstanding=outstanding)
+    finally:
+        db.close()
 
 
 

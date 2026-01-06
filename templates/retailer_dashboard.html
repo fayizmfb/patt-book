@@ -33,20 +33,20 @@
         </div>
     </div>
 
-    <!-- Quick Actions -->
+    <!-- Quick Actions - MVP Structure -->
     <h3>Quick Actions</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 30px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
         <a href="{{ url_for('add_customer') }}" class="btn btn-primary" style="text-align: center; padding: 15px;">
             ➕ Add Customer
         </a>
-        <a href="{{ url_for('add_credit') }}" class="btn btn-success" style="text-align: center; padding: 15px;">
-            💰 Add Credit
+        <a href="{{ url_for('add_payment') }}" class="btn btn-success" style="text-align: center; padding: 15px;">
+            💳 Add Payment
         </a>
         <a href="{{ url_for('retailer_customers') }}" class="btn btn-info" style="text-align: center; padding: 15px;">
-            👥 View Customers
+            👥 Creditors Details
         </a>
-        <a href="{{ url_for('payment_requests') }}" class="btn btn-warning" style="text-align: center; padding: 15px;">
-            💳 Payment Requests
+        <a href="{{ url_for('settings') }}" class="btn btn-secondary" style="text-align: center; padding: 15px;">
+            ⚙️ Settings / About App
         </a>
     </div>
 
@@ -76,7 +76,6 @@
     {% else %}
     <div style="text-align: center; padding: 40px; color: #666;">
         <p>No credit entries yet. Start by adding your first customer!</p>
-        <a href="{{ url_for('add_customer') }}" class="btn btn-primary">Add First Customer</a>
     </div>
     {% endif %}
 </div>
