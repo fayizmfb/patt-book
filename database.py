@@ -113,12 +113,21 @@ def init_db():
             CREATE TABLE IF NOT EXISTS payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 customer_id INTEGER NOT NULL,
+                retailer_id INTEGER,
                 amount REAL NOT NULL,
                 payment_date DATE NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES customers (id)
+                FOREIGN KEY (customer_id) REFERENCES customers (id),
+                FOREIGN KEY (retailer_id) REFERENCES users (id)
             )
         """)
+        
+        # Migration: Add retailer_id to payments table if not exists
+        try:
+            conn.execute("ALTER TABLE payments ADD COLUMN retailer_id INTEGER REFERENCES users(id)")
+        except:
+            pass
+
         
         # Create transactions table (Unified transaction history)
         conn.execute("""

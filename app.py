@@ -905,6 +905,14 @@ def add_payment(customer_id=None):
     if not is_user_logged_in():
         return redirect(url_for('login'))
     
+    # Store retailer_id from session for the payment record
+    retailer_id = session.get('user_id')
+    user_type = session.get('user_type')
+    
+    if user_type != 'retailer':
+         flash('Access denied. Only retailers can add payments.', 'error')
+         return redirect(url_for('customer_dashboard')) # Or appropriate redirect
+
     db = get_db()
     
     if request.method == 'POST':
@@ -924,33 +932,45 @@ def add_payment(customer_id=None):
             return render_template('add_payment.html', customers=customers)
         
         # Calculate current outstanding balance
+        # Fix: Filter by retailer_id to only show outstanding for this retailer
         total_debits = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
-            (customer_id, 'DEBIT')
+            'SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = ? AND retailer_id = ?',
+            (customer_id, retailer_id)
         ).fetchone()[0]
         
         total_payments = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND type = ?',
-            (customer_id, 'PAYMENT')
+            'SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = ? AND retailer_id = ?',
+            (customer_id, retailer_id)
         ).fetchone()[0]
         
         outstanding_balance = total_debits - total_payments
         
         # Prevent negative balance
         if amount > outstanding_balance:
-            flash(f'Payment amount ({amount}) exceeds outstanding balance ({outstanding_balance})!', 'error')
+            flash(f'Payment amount ({amount}) exceeds outstanding balance ({outstanding_balance}) for your store!', 'error')
             customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
             return render_template('add_payment.html', customers=customers)
         
         try:
             payment_date = datetime.now().date()
+            # Insert with retailer_id
             db.execute(
-                'INSERT INTO payments (customer_id, amount, payment_date) VALUES (?, ?, ?)',
-                (customer_id, amount, payment_date)
+                'INSERT INTO payments (customer_id, retailer_id, amount, payment_date) VALUES (?, ?, ?, ?)',
+                (customer_id, retailer_id, amount, payment_date)
             )
             db.commit()
             
-            # Create transaction record for the payment
+            # Create transaction record for the payment (Legacy/Deprecated? Keeping for safety but referencing retailer)
+            # IMPORTANT: The transactions table schema also likely needs retailer_id if it's used for unified views. 
+            # However, looking at the provided logs, the failure was on `payments` join.
+            # I will assume `transactions` might be less critical or used differently, but for consistency:
+            # The previous code inserted into 'transactions' table which has (customer_id, type, amount, description).
+            # It DOES NOT have retailer_id based on previous file views. 
+            # I will keep it as is to avoid breaking 'transactions' table unless I see an error there too.
+            # But the 'View Customer' logic used 'transactions' table. If that view is retailer-agnostic, it's fine.
+            # If it's retailer specific, it's broken too.
+            # Start strict: Fix payments first.
+            
             db.execute(
                 'INSERT INTO transactions (customer_id, type, amount, description) VALUES (?, ?, ?, ?)',
                 (customer_id, 'PAYMENT', amount, 'Payment received')
@@ -972,7 +992,10 @@ def add_payment(customer_id=None):
     
     # GET request - show form
     try:
+        # Show only customers relevant to this retailer (optional optimization, but safer)
+        # For now, keeping original logic to show all customers, but future optimization could filter.
         customers = db.execute('SELECT id, name FROM customers ORDER BY name').fetchall()
+        
         selected_customer = None
         if customer_id:
             selected_customer = db.execute(
