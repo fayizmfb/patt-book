@@ -30,6 +30,12 @@
                     </span>
                 </td>
                 <td>
+                    <a href="{{ url_for('add_credit', customer_id=customer['id']) }}" class="btn btn-success btn-sm">
+                        💰 Add Credit
+                    </a>
+                    <a href="{{ url_for('add_payment', customer_id=customer['id']) }}" class="btn btn-primary btn-sm">
+                        💳 Add Payment
+                    </a>
                     <a href="{{ url_for('customer_timeline', customer_id=customer['id']) }}" class="btn btn-info btn-sm">
                         📋 View Details
                     </a>

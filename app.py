@@ -588,15 +588,18 @@ def retailer_customers():
                 u.id,
                 u.name,
                 u.phone_number as phone,
-                COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) as outstanding
+                COALESCE(
+                    SUM(CASE WHEN t.type = 'credit' THEN t.amount ELSE 0 END) - 
+                    SUM(CASE WHEN t.type = 'payment' THEN t.amount ELSE 0 END), 
+                    0
+                ) as outstanding
             FROM users u
-            LEFT JOIN credits c ON c.customer_id = u.id AND c.retailer_id = ?
-            LEFT JOIN payments p ON p.customer_id = u.id AND p.retailer_id = ?
+            LEFT JOIN transactions t ON t.customer_id = u.id AND t.retailer_id = ?
             WHERE u.user_type = 'customer'
             GROUP BY u.id, u.name, u.phone_number
             ORDER BY u.name
             """,
-            (retailer_id, retailer_id)
+            (retailer_id,)
         ).fetchall()
         
         print(f"Successfully fetched {len(customers)} customers for retailer {retailer_id}")
@@ -829,15 +832,94 @@ def view_customer(customer_id):
 @app.route('/credit/add', methods=['GET', 'POST'])
 @app.route('/credit/add/<int:customer_id>', methods=['GET', 'POST'])
 def add_credit(customer_id=None):
-    """Add a credit entry for customer - TEMPORARILY DISABLED"""
+    """Add a credit entry for customer - SRS COMPLIANT"""
     if not is_user_logged_in():
         return redirect(url_for('login'))
     if session.get('user_type') != 'retailer':
         flash('Access denied. Only retailers can add credits.', 'error')
         return redirect(url_for('dashboard'))
     
-    flash('Credit feature is temporarily unavailable. Please use Add Payment to record transactions.', 'warning')
-    return redirect(url_for('retailer_dashboard'))
+    retailer_id = session['user_id']
+    
+    if request.method == 'POST':
+        try:
+            customer_id = int(request.form['customer_id'])
+            amount = float(request.form['amount'])
+            notes = request.form.get('notes', '').strip()
+            
+            print(f"Adding credit: customer_id={customer_id}, amount={amount}, retailer_id={retailer_id}")
+            
+        except (ValueError, KeyError) as e:
+            print(f"Invalid form data: {e}")
+            flash('Invalid form data. Please check your input.', 'error')
+            customers = _get_customers_for_retailer(db, retailer_id)
+            return render_template('add_credit.html', customers=customers)
+        
+        # Validate customer exists
+        customer = db.execute(
+            'SELECT id, name FROM users WHERE id = ? AND user_type = ?', 
+            (customer_id, 'customer')
+        ).fetchone()
+        if not customer:
+            print(f"Customer not found: {customer_id}")
+            flash('Selected customer not found.', 'error')
+            customers = _get_customers_for_retailer(db, retailer_id)
+            return render_template('add_credit.html', customers=customers)
+        
+        try:
+            db = get_db()
+            
+            # Insert credit transaction as per SRS
+            db.execute(
+                'INSERT INTO transactions (retailer_id, customer_id, type, amount, date, notes) VALUES (?, ?, ?, ?, ?, ?)',
+                (retailer_id, customer_id, 'credit', amount, datetime.now().date(), notes or 'Credit entry')
+            )
+            
+            # Add timeline event for tracking
+            db.execute(
+                'INSERT INTO timeline_events (customer_id, retailer_id, event_type, amount, description) VALUES (?, ?, ?, ?, ?)',
+                (customer_id, retailer_id, 'credit_added', amount, f'Credit of ₹{amount:.2f} added')
+            )
+            
+            db.commit()
+            
+            # Calculate new outstanding balance
+            credits_sum = db.execute(
+                'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND retailer_id = ? AND type = ?',
+                (customer_id, retailer_id, 'credit')
+            ).fetchone()[0]
+            
+            payments_sum = db.execute(
+                'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND retailer_id = ? AND type = ?',
+                (customer_id, retailer_id, 'payment')
+            ).fetchone()[0]
+            
+            new_outstanding = credits_sum - payments_sum
+            print(f"Credit added successfully. New outstanding: ₹{new_outstanding:.2f}")
+            
+            flash(f'Credit of ₹{amount:.2f} added successfully! New outstanding balance: ₹{new_outstanding:.2f}', 'success')
+            return redirect(url_for('retailer_customers'))
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error adding credit: {e}")
+            import traceback
+            traceback.print_exc()
+            flash(f'Error adding credit: {str(e)}', 'error')
+        finally:
+            db.close()
+    
+    # GET request - show form
+    db = get_db()
+    try:
+        customers = _get_customers_for_retailer(db, retailer_id)
+        selected_customer = None
+        if customer_id:
+            selected_customer = next((c for c in customers if c['id'] == customer_id), None)
+
+        return render_template('add_credit.html', customers=customers, selected_customer=selected_customer)
+    finally:
+        db.close()
 
 
 # ============================================================================
@@ -878,16 +960,15 @@ def add_payment(customer_id=None):
             customers = db.execute('SELECT id, name FROM users WHERE user_type = ? ORDER BY name', ('customer',)).fetchall()
             return render_template('add_payment.html', customers=customers)
         
-        # Calculate current outstanding balance
-        # Fix: Filter by retailer_id to only show outstanding for this retailer
+        # Calculate current outstanding balance using transactions table
         total_debits = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM credits WHERE customer_id = ? AND retailer_id = ?',
-            (customer_id, retailer_id)
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND retailer_id = ? AND type = ?',
+            (customer_id, retailer_id, 'credit')
         ).fetchone()[0]
         
         total_payments = db.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM payments WHERE customer_id = ? AND retailer_id = ?',
-            (customer_id, retailer_id)
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE customer_id = ? AND retailer_id = ? AND type = ?',
+            (customer_id, retailer_id, 'payment')
         ).fetchone()[0]
         
         outstanding_balance = total_debits - total_payments
@@ -903,10 +984,10 @@ def add_payment(customer_id=None):
             
             print(f"Processing payment: customer_id={customer_id}, amount={amount}, retailer_id={retailer_id}")
             
-            # Insert payment with retailer_id
+            # Insert payment transaction as per SRS
             db.execute(
-                'INSERT INTO payments (customer_id, retailer_id, amount, payment_date) VALUES (?, ?, ?, ?)',
-                (customer_id, retailer_id, amount, payment_date)
+                'INSERT INTO transactions (retailer_id, customer_id, type, amount, date, notes) VALUES (?, ?, ?, ?, ?, ?)',
+                (retailer_id, customer_id, 'payment', amount, payment_date, f'Payment of ₹{amount:.2f} received')
             )
             
             # Add timeline event for better tracking
