@@ -555,7 +555,7 @@ def customer_dashboard():
                      total_outstanding=total_outstanding)
 
 
-        @app.route('/customer/retailer/<int:retailer_id>')
+@app.route('/customer/retailer/<int:retailer_id>')
 def customer_retailer_detail(retailer_id):
     """
     View details for a specific retailer from customer perspective
