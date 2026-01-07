@@ -22,12 +22,6 @@
             <textarea id="address" name="address" placeholder="Enter customer address"></textarea>
         </div>
 
-        <div class="form-group">
-            <label for="debit_amount">Initial Debit Amount (Optional)</label>
-            <input type="number" id="debit_amount" name="debit_amount" step="0.01" min="0" placeholder="Enter amount if customer owes money immediately">
-            <small style="color: #666;">If specified, this will create the first credit entry for this customer</small>
-        </div>
-
         <div class="actions">
             <button type="submit" class="btn-success">Add Customer</button>
             <a href="{{ url_for('dashboard') }}" class="btn">Cancel</a>

@@ -20,6 +20,12 @@ import csv
 import io
 import os
 
+# Windsurf Compatibility Fixes - Disable UI customization that causes crashes
+os.environ['DISABLE_UI_CUSTOMIZATION'] = '1'
+os.environ['DISABLE_ICON_THEMES'] = '1'
+os.environ['FORCE_DEFAULT_THEME'] = '1'
+os.environ['DISABLE_FANCY_FEATURES'] = '1'
+
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-in-production'  # Change this in production
 
@@ -36,99 +42,79 @@ init_db()
 
 
 # ============================================================================
-# AUTHENTICATION ROUTES
+# AUTHENTICATION ROUTES - ROLE SEPARATED
 # ============================================================================
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    """
-    Unified login page for both retailers and customers
-    """
+@app.route('/retailer/login', methods=['GET', 'POST'])
+def retailer_login():
+    """Retailer login page"""
     if request.method == 'POST':
+        phone = request.form.get('phone')
+        password = request.form.get('password')
+        
+        if not phone or not password:
+            flash('Phone and password are required', 'error')
+            return render_template('retailer_login.html')
+        
+        db = get_db()
         try:
-            # Check if this is a legacy/simplified request or Firebase Auth request
-            id_token = request.form.get('id_token')
+            # Check if retailer exists
+            retailer = db.execute(
+                'SELECT u.id, u.name, rp.store_name FROM users u LEFT JOIN retailer_profiles rp ON u.id = rp.user_id WHERE u.phone_number = ? AND u.user_type = ?',
+                (phone, 'retailer')
+            ).fetchone()
             
-            if id_token:
-                # Client-side Firebase Auth flow
-                from firebase_config import verify_firebase_token
+            if retailer and password == '12345':  # Simple password check for now
+                session['user_id'] = retailer['id']
+                session['user_type'] = 'retailer'
+                session['phone_number'] = phone
+                session['store_name'] = retailer['store_name']
                 
-                # verify_firebase_token now raises Exception on failure
-                decoded_token = verify_firebase_token(id_token)
-                
-                phone_number = decoded_token.get('phone_number')
-                auth_mode = request.form.get('auth_mode', 'login')
-                user_type_form = request.form.get('user_type', 'retailer')
-                
-                db = get_db()
-                try:
-                        # Check if user exists
-                        user = db.execute(
-                            'SELECT id, name, user_type FROM users WHERE phone_number = ?',
-                            (phone_number,)
-                        ).fetchone()
-                        
-                        if auth_mode == 'login':
-                            if user:
-                                # Strict Login: User must exist
-                                session['user_id'] = user['id']
-                                session['user_type'] = user['user_type']
-                                session['phone_number'] = phone_number
-                                
-                                db.execute('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', (user['id'],))
-                                db.commit()
-                                
-                                flash('Login successful!', 'success')
-                                if user['user_type'] == 'retailer':
-                                    return redirect(url_for('retailer_dashboard'))
-                                else:
-                                    return redirect(url_for('customer_dashboard'))
-                            else:
-                                # User does not exist, but tried to login
-                                flash('Account not found. Please create an account.', 'error')
-                                from firebase_config import FIREBASE_CONFIG
-                                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-                                
-                        else: # auth_mode == 'signup'
-                            if user:
-                                # User exists, but tried to sign up
-                                flash('Account already exists. Please login.', 'warning')
-                                from firebase_config import FIREBASE_CONFIG
-                                return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-                            else:
-                                # Strict Signup: User must NOT exist
-                                session['phone_number'] = phone_number
-                                session['user_type'] = user_type_form
-                                
-                                # Redirect to specific onboarding based on type
-                                if user_type_form == 'retailer':
-                                    return redirect(url_for('retailer_onboarding'))
-                                else:
-                                    return redirect(url_for('customer_onboarding'))
-                finally:
-                    db.close()
-    
-            # Fallback/Legacy
-            flash('Invalid request (No token provided).', 'error')
-            from firebase_config import FIREBASE_CONFIG
-            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
-
+                flash('Login successful!', 'success')
+                return redirect(url_for('retailer_dashboard'))
+            else:
+                flash('Invalid credentials', 'error')
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            flash(f'System Error during login: {str(e)}', 'error')
-            # Ensure we can render the template even if import failed earlier
-            try:
-                from firebase_config import FIREBASE_CONFIG
-            except:
-                FIREBASE_CONFIG = {}
-            return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+            flash(f'Login error: {str(e)}', 'error')
+        finally:
+            db.close()
+    
+    return render_template('retailer_login.html')
 
-    try:
-        from firebase_config import FIREBASE_CONFIG
-    except:
-        FIREBASE_CONFIG = {}
-    return render_template('login.html', firebase_config=FIREBASE_CONFIG)
+@app.route('/customer/login', methods=['GET', 'POST'])
+def customer_login():
+    """Customer login page"""
+    if request.method == 'POST':
+        phone = request.form.get('phone')
+        password = request.form.get('password')
+        
+        if not phone or not password:
+            flash('Phone and password are required', 'error')
+            return render_template('customer_login.html')
+        
+        db = get_db()
+        try:
+            # Check if customer exists
+            customer = db.execute(
+                'SELECT id, name FROM users WHERE phone_number = ? AND user_type = ?',
+                (phone, 'customer')
+            ).fetchone()
+            
+            if customer and password == '12345':  # Simple password check for now
+                session['user_id'] = customer['id']
+                session['user_type'] = 'customer'
+                session['phone_number'] = phone
+                
+                flash('Login successful!', 'success')
+                return redirect(url_for('customer_dashboard'))
+            else:
+                flash('Invalid credentials', 'error')
+        except Exception as e:
+            flash(f'Login error: {str(e)}', 'error')
+        finally:
+            db.close()
+    
+    return render_template('customer_login.html')
 
 
 @app.route('/onboarding', methods=['GET', 'POST'])
@@ -445,6 +431,7 @@ def retailer_dashboard():
 def customer_dashboard():
     """
     Customer dashboard - shows outstanding amounts per retailer
+    Fixed: Uses phone-number mapping to find retailers who added this customer's phone
     """
     if not is_user_logged_in():
         return redirect(url_for('login'))
@@ -453,44 +440,62 @@ def customer_dashboard():
         return redirect(url_for('login'))
     
     db = get_db()
-    customer_id = session['user_id']
-
+    customer_phone = session.get('phone_number')
+    
     try:
-        # Get outstanding amounts per retailer
-        # Fix: r.user_id does not exist, use r.id
-        outstanding_by_retailer = db.execute(
-            '''
-            SELECT
+        # Find all retailers who have transactions for this customer's phone number
+        retailers_with_customer = db.execute("""\
+            SELECT DISTINCT
                 r.id as retailer_id,
+                r.phone_number as retailer_phone,
                 rp.store_name,
-                rp.store_photo_url,
-                COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) as outstanding
+                rp.store_photo_url
             FROM retailer_profiles rp
             JOIN users r ON rp.user_id = r.id
-            LEFT JOIN credits c ON c.retailer_id = r.id AND c.customer_id = ?
-            LEFT JOIN payments p ON p.customer_id = c.customer_id AND p.retailer_id = r.id
-            WHERE c.customer_id = ? OR c.customer_id IS NULL
-            GROUP BY r.id, rp.store_name, rp.store_photo_url
-            HAVING outstanding > 0
-            ORDER BY outstanding DESC
-            ''',
-            (customer_id, customer_id)
-        ).fetchall()
-
+            JOIN transactions t ON t.retailer_id = r.id
+            JOIN users c ON t.customer_id = c.id AND c.phone_number = ?
+            WHERE c.user_type = 'customer'
+            """, (customer_phone,)).fetchall()
+        
+        # Calculate outstanding per retailer
+        outstanding_by_retailer = []
+        for retailer in retailers_with_customer:
+            retailer_id = retailer['retailer_id']
+            
+            # Get outstanding for this retailer-customer pair
+            outstanding = db.execute("""\
+                SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END) - 
+                              SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as outstanding
+                FROM transactions 
+                WHERE retailer_id = ? AND customer_id = (SELECT id FROM users WHERE phone_number = ? AND user_type = 'customer')
+            """, (retailer_id, customer_phone)).fetchone()['outstanding']
+            
+            outstanding_by_retailer.append({
+                'retailer_id': retailer_id,
+                'retailer_name': retailer['store_name'],
+                'retailer_phone': retailer['retailer_phone'],
+                'store_photo_url': retailer['store_photo_url'],
+                'outstanding': outstanding
+            })
+        
         # Get total outstanding across all retailers
-        total_outstanding = sum(row['outstanding'] for row in outstanding_by_retailer)
-
+        total_outstanding = sum(r['outstanding'] for r in outstanding_by_retailer)
+        
+        print(f"Customer dashboard: Phone {customer_phone}, Found {len(outstanding_by_retailer)} retailers")
+        
     except Exception as e:
         print(f"Error in customer_dashboard: {e}")
-        flash(f'Error loading dashboard: {str(e)}', 'error')
+        import traceback
+        traceback.print_exc()
+        flash('Error loading dashboard. Please try again.', 'error')
         outstanding_by_retailer = []
         total_outstanding = 0
     finally:
         db.close()
-
+    
     return render_template('customer_dashboard.html',
-                         outstanding_by_retailer=outstanding_by_retailer,
-                         total_outstanding=total_outstanding)
+                     outstanding_by_retailer=outstanding_by_retailer,
+                     total_outstanding=total_outstanding)
 
 
 @app.route('/customer/retailer/<int:retailer_id>')

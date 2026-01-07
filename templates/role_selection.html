@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Patt Book - Role Selection{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 100px auto;">
+    <h2 style="text-align: center; margin-bottom: 30px;">Welcome to Patt Book</h2>
+    <p style="text-align: center; margin-bottom: 30px; color: #666;">
+        Please select your role to continue
+    </p>
+    
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+        <a href="{{ url_for('retailer_login') }}" class="btn" style="display: block; text-align: center; padding: 20px; font-size: 16px;">
+            🏪 Continue as Retailer
+        </a>
+        
+        <a href="{{ url_for('customer_login') }}" class="btn btn-success" style="display: block; text-align: center; padding: 20px; font-size: 16px;">
+            👤 Continue as Customer
+        </a>
+    </div>
+    
+    <div style="text-align: center; margin-top: 30px; color: #999; font-size: 14px;">
+        <small>Retailers can manage customers and credit<br>Customers can view their outstanding balances</small>
+    </div>
+</div>
+{% endblock %}
