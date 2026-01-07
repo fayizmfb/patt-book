@@ -20,11 +20,22 @@ import csv
 import io
 import os
 
-# Windsurf Compatibility Fixes - Disable UI customization that causes crashes
+# Windsurf Compatibility Fixes - Disable ALL UI customization that causes crashes
 os.environ['DISABLE_UI_CUSTOMIZATION'] = '1'
 os.environ['DISABLE_ICON_THEMES'] = '1'
 os.environ['FORCE_DEFAULT_THEME'] = '1'
 os.environ['DISABLE_FANCY_FEATURES'] = '1'
+os.environ['DISABLE_FILE_WATCHING'] = '1'
+os.environ['DISABLE_AUTO_RELOAD'] = '1'
+os.environ['DISABLE_CUSTOM_FONTS'] = '1'
+os.environ['DISABLE_CUSTOM_THEMES'] = '1'
+os.environ['DISABLE_ANIMATIONS'] = '1'
+os.environ['DISABLE_TRANSITIONS'] = '1'
+os.environ['DISABLE_EXTENSIONS'] = '1'
+os.environ['DISABLE_PREVIEW'] = '1'
+os.environ['DISABLE_WORKSPACE_FEATURES'] = '1'
+os.environ['EDITOR_MODE'] = 'basic'
+os.environ['FORCE_SIMPLE_RENDERING'] = '1'
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-in-production'  # Change this in production
@@ -83,7 +94,7 @@ def retailer_login():
 
 @app.route('/customer/login', methods=['GET', 'POST'])
 def customer_login():
-    """Customer login page"""
+    """Customer login page - FIXED: Handle new role-separated data structure"""
     if request.method == 'POST':
         phone = request.form.get('phone')
         password = request.form.get('password')
@@ -94,7 +105,7 @@ def customer_login():
         
         db = get_db()
         try:
-            # Check if customer exists
+            # Get customer by phone number
             customer = db.execute(
                 'SELECT id, name FROM users WHERE phone_number = ? AND user_type = ?',
                 (phone, 'customer')
