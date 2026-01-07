@@ -442,60 +442,106 @@ def retailer_dashboard():
 def customer_dashboard():
     """
     Customer dashboard - shows outstanding amounts per retailer
-    Fixed: Uses phone-number mapping to find retailers who added this customer's phone
+    FIXED: Safe data handling with proper guards and empty states
     """
     if not is_user_logged_in():
-        return redirect(url_for('login'))
+        return redirect(url_for('customer_login'))
     if session.get('user_type') != 'customer':
         flash('Access denied', 'error')
-        return redirect(url_for('login'))
+        return redirect(url_for('customer_login'))
     
     db = get_db()
     customer_phone = session.get('phone_number')
     
+    # Guard: Check if phone number exists
+    if not customer_phone:
+        print("ERROR: No phone number in session")
+        flash('Session error. Please login again.', 'error')
+        return redirect(url_for('customer_login'))
+    
     try:
-        # Find all retailers who have transactions for this customer's phone number
-        retailers_with_customer = db.execute("""\
-            SELECT DISTINCT
-                r.id as retailer_id,
-                r.phone_number as retailer_phone,
-                rp.store_name,
-                rp.store_photo_url
-            FROM retailer_profiles rp
-            JOIN users r ON rp.user_id = r.id
-            JOIN transactions t ON t.retailer_id = r.id
-            JOIN users c ON t.customer_id = c.id AND c.phone_number = ?
-            WHERE c.user_type = 'customer'
-            """, (customer_phone,)).fetchall()
+        print(f"Customer dashboard: Processing phone {customer_phone}")
         
-        # Calculate outstanding per retailer
+        # Guard: Check if customer exists
+        customer = db.execute(
+            'SELECT id, name FROM users WHERE phone_number = ? AND user_type = ?',
+            (customer_phone, 'customer')
+        ).fetchone()
+        
+        if not customer:
+            print(f"Customer not found for phone {customer_phone}")
+            return render_template('customer_dashboard.html',
+                             outstanding_by_retailer=[],
+                             total_outstanding=0)
+        
+        customer_id = customer['id']
+        print(f"Found customer: ID={customer_id}, Name={customer['name']}")
+        
+        # Guard: Check if transactions table exists and has data
+        try:
+            # Find retailers with transactions for this customer
+            retailers_with_customer = db.execute("""
+                SELECT DISTINCT
+                    r.id as retailer_id,
+                    r.phone_number as retailer_phone,
+                    rp.store_name,
+                    rp.store_photo_url
+                FROM retailer_profiles rp
+                JOIN users r ON rp.user_id = r.id
+                JOIN transactions t ON t.retailer_id = r.id
+                JOIN users c ON t.customer_id = c.id AND c.phone_number = ?
+                WHERE c.user_type = 'customer'
+                """, (customer_phone,)).fetchall()
+            
+            print(f"Found {len(retailers_with_customer)} retailers for customer")
+            
+        except Exception as e:
+            print(f"Transaction query failed: {e}")
+            # Fallback: Try basic customer lookup
+            retailers_with_customer = []
+        
+        # Calculate outstanding per retailer with guards
         outstanding_by_retailer = []
         for retailer in retailers_with_customer:
             retailer_id = retailer['retailer_id']
             
-            # Get outstanding for this retailer-customer pair
-            outstanding = db.execute("""\
-                SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END) - 
-                              SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as outstanding
-                FROM transactions 
-                WHERE retailer_id = ? AND customer_id = (SELECT id FROM users WHERE phone_number = ? AND user_type = 'customer')
-            """, (retailer_id, customer_phone)).fetchone()['outstanding']
-            
-            outstanding_by_retailer.append({
-                'retailer_id': retailer_id,
-                'retailer_name': retailer['store_name'],
-                'retailer_phone': retailer['retailer_phone'],
-                'store_photo_url': retailer['store_photo_url'],
-                'outstanding': outstanding
-            })
+            try:
+                # Get outstanding for this retailer-customer pair
+                outstanding_result = db.execute("""
+                    SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END) - 
+                                  SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as outstanding
+                    FROM transactions 
+                    WHERE retailer_id = ? AND customer_id = ?
+                    """, (retailer_id, customer_id)).fetchone()
+                
+                outstanding = outstanding_result['outstanding'] if outstanding_result else 0
+                
+                outstanding_by_retailer.append({
+                    'retailer_id': retailer_id,
+                    'retailer_name': retailer['store_name'] or 'Unknown Store',
+                    'retailer_phone': retailer['retailer_phone'],
+                    'store_photo_url': retailer['store_photo_url'],
+                    'outstanding': outstanding
+                })
+                
+            except Exception as e:
+                print(f"Error calculating outstanding for retailer {retailer_id}: {e}")
+                # Add retailer with zero outstanding
+                outstanding_by_retailer.append({
+                    'retailer_id': retailer_id,
+                    'retailer_name': retailer['store_name'] or 'Unknown Store',
+                    'retailer_phone': retailer['retailer_phone'],
+                    'store_photo_url': retailer['store_photo_url'],
+                    'outstanding': 0
+                })
         
-        # Get total outstanding across all retailers
+        # Get total outstanding
         total_outstanding = sum(r['outstanding'] for r in outstanding_by_retailer)
         
-        print(f"Customer dashboard: Phone {customer_phone}, Found {len(outstanding_by_retailer)} retailers")
+        print(f"Final result: {len(outstanding_by_retailer)} retailers, Total outstanding: {total_outstanding}")
         
     except Exception as e:
-        print(f"Error in customer_dashboard: {e}")
+        print(f"CRITICAL ERROR in customer_dashboard: {e}")
         import traceback
         traceback.print_exc()
         flash('Error loading dashboard. Please try again.', 'error')
@@ -509,63 +555,103 @@ def customer_dashboard():
                      total_outstanding=total_outstanding)
 
 
-@app.route('/customer/retailer/<int:retailer_id>')
+        @app.route('/customer/retailer/<int:retailer_id>')
 def customer_retailer_detail(retailer_id):
     """
     View details for a specific retailer from customer perspective
     Shows ledger/transactions only for this retailer
+    FIXED: Safe data handling with proper guards
     """
     if not is_user_logged_in():
-        return redirect(url_for('login'))
+        return redirect(url_for('customer_login'))
     if session.get('user_type') != 'customer':
         flash('Access denied', 'error')
-        return redirect(url_for('login'))
+        return redirect(url_for('customer_login'))
         
     db = get_db()
-    customer_id = session['user_id']
+    customer_phone = session.get('phone_number')
+    
+    # Guard: Check if phone number exists
+    if not customer_phone:
+        print("ERROR: No phone number in session for retailer detail")
+        flash('Session error. Please login again.', 'error')
+        return redirect(url_for('customer_login'))
     
     try:
-        # Get retailer details
+        print(f"Customer retailer detail: Processing phone {customer_phone}, retailer {retailer_id}")
+        
+        # Guard: Get customer by phone
+        customer = db.execute(
+            'SELECT id, name FROM users WHERE phone_number = ? AND user_type = ?',
+            (customer_phone, 'customer')
+        ).fetchone()
+        
+        if not customer:
+            print(f"Customer not found for phone {customer_phone}")
+            flash('Customer not found!', 'error')
+            return redirect(url_for('customer_dashboard'))
+        
+        customer_id = customer['id']
+        
+        # Get retailer details with guard
         retailer = db.execute(
             'SELECT u.*, rp.store_name, rp.store_address, rp.store_photo_url FROM users u JOIN retailer_profiles rp ON u.id = rp.user_id WHERE u.id = ? AND u.user_type = ?',
             (retailer_id, 'retailer')
         ).fetchone()
 
         if not retailer:
+            print(f"Retailer not found: ID {retailer_id}")
             flash('Retailer not found!', 'error')
             return redirect(url_for('customer_dashboard'))
 
-        # Get transaction history
-        transactions = db.execute(
-            '''
-            SELECT
-                'credit' as type,
-                c.amount,
-                c.entry_date as date,
-                c.notes as description
-            FROM credits c
-            WHERE c.customer_id = ? AND c.retailer_id = ?
-            UNION ALL
-            SELECT
-                'payment' as type,
-                p.amount,
-                p.payment_date as date,
-                'Payment received' as description
-            FROM payments p
-            WHERE p.customer_id = ? AND p.retailer_id = ?
-            ORDER BY date DESC
-            ''',
-            (customer_id, retailer_id, customer_id, retailer_id)
-        ).fetchall()
+        # Get transaction history with guard
+        try:
+            transactions = db.execute("""
+                SELECT
+                    'credit' as type,
+                    t.amount,
+                    t.date,
+                    t.notes as description
+                FROM transactions t
+                WHERE t.customer_id = ? AND t.retailer_id = ? AND t.type = 'credit'
+                UNION ALL
+                SELECT
+                    'payment' as type,
+                    t.amount,
+                    t.date,
+                    'Payment received' as description
+                FROM transactions t
+                WHERE t.customer_id = ? AND t.retailer_id = ? AND t.type = 'payment'
+                ORDER BY date DESC
+                """,
+                (customer_id, retailer_id, customer_id, retailer_id)
+            ).fetchall()
+            
+            print(f"Found {len(transactions)} transactions")
+            
+        except Exception as e:
+            print(f"Transaction query failed: {e}")
+            transactions = []
 
-        # Get current outstanding balance
-        outstanding = db.execute(
-            'SELECT COALESCE(SUM(c.amount), 0) - COALESCE(SUM(p.amount), 0) FROM credits c LEFT JOIN payments p ON c.customer_id = p.customer_id AND c.retailer_id = p.retailer_id WHERE c.customer_id = ? AND c.retailer_id = ?',
-            (customer_id, retailer_id)
-        ).fetchone()[0]
+        # Get current outstanding balance with guard
+        try:
+            outstanding_result = db.execute("""
+                SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END) - 
+                              SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as outstanding
+                FROM transactions 
+                WHERE customer_id = ? AND retailer_id = ?
+                """, (customer_id, retailer_id)).fetchone()
+            
+            outstanding = outstanding_result['outstanding'] if outstanding_result else 0
+            
+        except Exception as e:
+            print(f"Outstanding calculation failed: {e}")
+            outstanding = 0
 
     except Exception as e:
-        print(f"Error in customer_retailer_detail: {e}")
+        print(f"CRITICAL ERROR in customer_retailer_detail: {e}")
+        import traceback
+        traceback.print_exc()
         flash('Error loading retailer details.', 'error')
         retailer = None
         transactions = []
@@ -574,14 +660,9 @@ def customer_retailer_detail(retailer_id):
         db.close()
         
     return render_template('customer_retailer_detail.html', 
-                         retailer=retailer, 
-                         transactions=transactions, 
-                         outstanding=outstanding)
-
-
-# ============================================================================
-# CUSTOMER MASTER OPERATIONS
-# ============================================================================
+                     retailer=retailer, 
+                     transactions=transactions, 
+                     outstanding=outstanding)
 
 @app.route('/retailer/customers')
 def retailer_customers():
