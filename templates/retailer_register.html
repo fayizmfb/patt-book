@@ -16,18 +16,7 @@
         <div class="form-group">
             <label for="phone">Phone Number *</label>
             <input type="tel" id="phone" name="phone" required placeholder="Enter your phone number">
-            <small style="color: #666;">This will be used for login</small>
-        </div>
-        
-        <div class="form-group">
-            <label for="password">Password / PIN *</label>
-            <input type="password" id="password" name="password" required placeholder="Create a password or PIN">
-            <small style="color: #666;">Keep this secure - you'll need it to login</small>
-        </div>
-        
-        <div class="form-group">
-            <label for="confirm_password">Confirm Password *</label>
-            <input type="password" id="confirm_password" name="confirm_password" required placeholder="Confirm your password">
+            <small style="color: #666;">This will be used for OTP verification and login</small>
         </div>
         
         <div class="form-group">
@@ -45,23 +34,4 @@
         <small>By creating an account, you agree to manage customer credit responsibly</small>
     </div>
 </div>
-
-<script>
-document.querySelector('form').addEventListener('submit', function(e) {
-    const password = document.getElementById('password').value;
-    const confirm_password = document.getElementById('confirm_password').value;
-    
-    if (password !== confirm_password) {
-        e.preventDefault();
-        alert('Passwords do not match!');
-        return false;
-    }
-    
-    if (password.length < 4) {
-        e.preventDefault();
-        alert('Password must be at least 4 characters long!');
-        return false;
-    }
-});
-</script>
 {% endblock %}

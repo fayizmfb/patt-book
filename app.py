@@ -58,14 +58,17 @@ init_db()
 
 @app.route('/retailer/login', methods=['GET', 'POST'])
 def retailer_login():
-    """Retailer login page"""
+    """Retailer login page - OTP based authentication"""
     if request.method == 'POST':
         phone = request.form.get('phone')
-        password = request.form.get('password')
         
-        if not phone or not password:
-            flash('Phone and password are required', 'error')
+        if not phone:
+            flash('Phone number is required', 'error')
             return render_template('retailer_login.html')
+        
+        # Clean phone number
+        if not phone.startswith('+'):
+            phone = '+' + phone
         
         db = get_db()
         try:
@@ -75,16 +78,18 @@ def retailer_login():
                 (phone, 'retailer')
             ).fetchone()
             
-            if retailer and password == '12345':  # Simple password check for now
+            if retailer:
+                # For now, simulate OTP verification with a simple session
+                # In production, this would integrate with Firebase OTP
                 session['user_id'] = retailer['id']
                 session['user_type'] = 'retailer'
                 session['phone_number'] = phone
                 session['store_name'] = retailer['store_name']
                 
-                flash('Login successful!', 'success')
+                flash('Login successful! (OTP simulated)', 'success')
                 return redirect(url_for('retailer_dashboard'))
             else:
-                flash('Invalid credentials', 'error')
+                flash('Phone number not found. Please create an account first.', 'error')
         except Exception as e:
             flash(f'Login error: {str(e)}', 'error')
         finally:
@@ -98,21 +103,11 @@ def retailer_register():
     if request.method == 'POST':
         shop_name = request.form.get('shop_name', '').strip()
         phone = request.form.get('phone', '').strip()
-        password = request.form.get('password', '').strip()
-        confirm_password = request.form.get('confirm_password', '').strip()
         shop_address = request.form.get('shop_address', '').strip()
         
         # Validation
-        if not shop_name or not phone or not password or not confirm_password:
-            flash('All required fields must be filled', 'error')
-            return render_template('retailer_register.html')
-        
-        if password != confirm_password:
-            flash('Passwords do not match', 'error')
-            return render_template('retailer_register.html')
-        
-        if len(password) < 4:
-            flash('Password must be at least 4 characters long', 'error')
+        if not shop_name or not phone:
+            flash('Shop name and phone number are required', 'error')
             return render_template('retailer_register.html')
         
         # Clean phone number
@@ -131,10 +126,10 @@ def retailer_register():
                 flash('A user with this phone number already exists!', 'error')
                 return render_template('retailer_register.html')
             
-            # Create retailer user
+            # Create retailer user (no password needed for OTP auth)
             cursor = db.execute(
-                'INSERT INTO users (phone_number, user_type, name, password) VALUES (?, ?, ?, ?)',
-                (phone, 'retailer', shop_name, password)  # Simple password storage for now
+                'INSERT INTO users (phone_number, user_type, name) VALUES (?, ?, ?)',
+                (phone, 'retailer', shop_name)
             )
             retailer_id = cursor.lastrowid
             
@@ -147,7 +142,7 @@ def retailer_register():
             db.commit()
             
             print(f"Retailer registered successfully: ID={retailer_id}, Shop={shop_name}, Phone={phone}")
-            flash('Retailer account created successfully! Please login.', 'success')
+            flash('Retailer account created successfully! Please login with OTP.', 'success')
             return redirect(url_for('retailer_login'))
             
         except Exception as e:
@@ -161,14 +156,17 @@ def retailer_register():
 
 @app.route('/customer/login', methods=['GET', 'POST'])
 def customer_login():
-    """Customer login page - FIXED: Handle new role-separated data structure"""
+    """Customer login page - OTP based authentication"""
     if request.method == 'POST':
         phone = request.form.get('phone')
-        password = request.form.get('password')
         
-        if not phone or not password:
-            flash('Phone and password are required', 'error')
+        if not phone:
+            flash('Phone number is required', 'error')
             return render_template('customer_login.html')
+        
+        # Clean phone number
+        if not phone.startswith('+'):
+            phone = '+' + phone
         
         db = get_db()
         try:
@@ -178,15 +176,17 @@ def customer_login():
                 (phone, 'customer')
             ).fetchone()
             
-            if customer and password == '12345':  # Simple password check for now
+            if customer:
+                # For now, simulate OTP verification with a simple session
+                # In production, this would integrate with Firebase OTP
                 session['user_id'] = customer['id']
                 session['user_type'] = 'customer'
                 session['phone_number'] = phone
                 
-                flash('Login successful!', 'success')
+                flash('Login successful! (OTP simulated)', 'success')
                 return redirect(url_for('customer_dashboard'))
             else:
-                flash('Invalid credentials', 'error')
+                flash('Phone number not found. Please create an account first.', 'error')
         except Exception as e:
             flash(f'Login error: {str(e)}', 'error')
         finally:
@@ -200,21 +200,11 @@ def customer_register():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         phone = request.form.get('phone', '').strip()
-        password = request.form.get('password', '').strip()
-        confirm_password = request.form.get('confirm_password', '').strip()
         address = request.form.get('address', '').strip()
         
         # Validation
-        if not name or not phone or not password or not confirm_password:
-            flash('All required fields must be filled', 'error')
-            return render_template('customer_register.html')
-        
-        if password != confirm_password:
-            flash('Passwords do not match', 'error')
-            return render_template('customer_register.html')
-        
-        if len(password) < 4:
-            flash('Password must be at least 4 characters long', 'error')
+        if not name or not phone:
+            flash('Name and phone number are required', 'error')
             return render_template('customer_register.html')
         
         # Clean phone number
@@ -233,17 +223,17 @@ def customer_register():
                 flash('A user with this phone number already exists!', 'error')
                 return render_template('customer_register.html')
             
-            # Create customer user
+            # Create customer user (no password needed for OTP auth)
             cursor = db.execute(
-                'INSERT INTO users (phone_number, user_type, name, password, address) VALUES (?, ?, ?, ?, ?)',
-                (phone, 'customer', name, password, address)  # Simple password storage for now
+                'INSERT INTO users (phone_number, user_type, name, address) VALUES (?, ?, ?, ?)',
+                (phone, 'customer', name, address)
             )
             customer_id = cursor.lastrowid
             
             db.commit()
             
             print(f"Customer registered successfully: ID={customer_id}, Name={name}, Phone={phone}")
-            flash('Customer account created successfully! Please login.', 'success')
+            flash('Customer account created successfully! Please login with OTP.', 'success')
             return redirect(url_for('customer_login'))
             
         except Exception as e:
