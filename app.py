@@ -307,10 +307,13 @@ def logout():
 
 @app.route('/')
 def home():
-    """Root route for health checks and service status"""
-    return render_template('test_root.html', 
-                         version="1.0.0", 
-                         timestamp=datetime.now().isoformat())
+    """Root route - redirect to role selection"""
+    return redirect(url_for('role_selection'))
+
+@app.route('/role-selection')
+def role_selection():
+    """Role selection screen - First page users see"""
+    return render_template('role_selection.html')
 
 @app.route('/health')
 def health_check_json():
