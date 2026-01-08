@@ -201,6 +201,7 @@
         </div>
     </header>
 
+    {% if session.get('user_id') %}
     <nav>
         <div class="container">
             <ul>
@@ -212,16 +213,12 @@
                 {% elif session.get('user_type') == 'customer' %}
                 <li><a href="{{ url_for('customer_dashboard') }}">My Outstanding</a></li>
                 <li><a href="{{ url_for('submit_payment') }}">Submit Payment</a></li>
-                {% else %}
-                <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                <li><a href="{{ url_for('retailer_customers') }}">Customers</a></li>
-                <li><a href="{{ url_for('add_credit') }}">Add Credit</a></li>
-                <li><a href="{{ url_for('add_payment') }}">Add Payment</a></li>
                 {% endif %}
                 <li style="margin-left: auto;"><a href="{{ url_for('logout') }}">Logout</a></li>
             </ul>
         </div>
     </nav>
+    {% endif %}
 
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}

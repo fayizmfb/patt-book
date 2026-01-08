@@ -92,6 +92,73 @@ def retailer_login():
     
     return render_template('retailer_login.html')
 
+@app.route('/retailer/register', methods=['GET', 'POST'])
+def retailer_register():
+    """Retailer registration page"""
+    if request.method == 'POST':
+        shop_name = request.form.get('shop_name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        shop_address = request.form.get('shop_address', '').strip()
+        
+        # Validation
+        if not shop_name or not phone or not password or not confirm_password:
+            flash('All required fields must be filled', 'error')
+            return render_template('retailer_register.html')
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return render_template('retailer_register.html')
+        
+        if len(password) < 4:
+            flash('Password must be at least 4 characters long', 'error')
+            return render_template('retailer_register.html')
+        
+        # Clean phone number
+        if not phone.startswith('+'):
+            phone = '+' + phone
+        
+        db = get_db()
+        try:
+            # Check if phone already exists
+            existing = db.execute(
+                'SELECT id FROM users WHERE phone_number = ?',
+                (phone,)
+            ).fetchone()
+            
+            if existing:
+                flash('A user with this phone number already exists!', 'error')
+                return render_template('retailer_register.html')
+            
+            # Create retailer user
+            cursor = db.execute(
+                'INSERT INTO users (phone_number, user_type, name, password) VALUES (?, ?, ?, ?)',
+                (phone, 'retailer', shop_name, password)  # Simple password storage for now
+            )
+            retailer_id = cursor.lastrowid
+            
+            # Create retailer profile
+            db.execute(
+                'INSERT INTO retailer_profiles (user_id, store_name, store_address) VALUES (?, ?, ?)',
+                (retailer_id, shop_name, shop_address)
+            )
+            
+            db.commit()
+            
+            print(f"Retailer registered successfully: ID={retailer_id}, Shop={shop_name}, Phone={phone}")
+            flash('Retailer account created successfully! Please login.', 'success')
+            return redirect(url_for('retailer_login'))
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error registering retailer: {str(e)}")
+            flash(f'Error creating account: {str(e)}', 'error')
+        finally:
+            db.close()
+    
+    return render_template('retailer_register.html')
+
 @app.route('/customer/login', methods=['GET', 'POST'])
 def customer_login():
     """Customer login page - FIXED: Handle new role-separated data structure"""
@@ -126,6 +193,67 @@ def customer_login():
             db.close()
     
     return render_template('customer_login.html')
+
+@app.route('/customer/register', methods=['GET', 'POST'])
+def customer_register():
+    """Customer registration page"""
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        address = request.form.get('address', '').strip()
+        
+        # Validation
+        if not name or not phone or not password or not confirm_password:
+            flash('All required fields must be filled', 'error')
+            return render_template('customer_register.html')
+        
+        if password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return render_template('customer_register.html')
+        
+        if len(password) < 4:
+            flash('Password must be at least 4 characters long', 'error')
+            return render_template('customer_register.html')
+        
+        # Clean phone number
+        if not phone.startswith('+'):
+            phone = '+' + phone
+        
+        db = get_db()
+        try:
+            # Check if phone already exists
+            existing = db.execute(
+                'SELECT id FROM users WHERE phone_number = ?',
+                (phone,)
+            ).fetchone()
+            
+            if existing:
+                flash('A user with this phone number already exists!', 'error')
+                return render_template('customer_register.html')
+            
+            # Create customer user
+            cursor = db.execute(
+                'INSERT INTO users (phone_number, user_type, name, password, address) VALUES (?, ?, ?, ?, ?)',
+                (phone, 'customer', name, password, address)  # Simple password storage for now
+            )
+            customer_id = cursor.lastrowid
+            
+            db.commit()
+            
+            print(f"Customer registered successfully: ID={customer_id}, Name={name}, Phone={phone}")
+            flash('Customer account created successfully! Please login.', 'success')
+            return redirect(url_for('customer_login'))
+            
+        except Exception as e:
+            db.rollback()
+            print(f"Error registering customer: {str(e)}")
+            flash(f'Error creating account: {str(e)}', 'error')
+        finally:
+            db.close()
+    
+    return render_template('customer_register.html')
 
 
 @app.route('/onboarding', methods=['GET', 'POST'])
