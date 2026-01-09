@@ -255,8 +255,8 @@ def retailer_register():
             
             # Create retailer
             db.execute(
-                'INSERT INTO retailers (retailer_phone, shop_name, store_address) VALUES (?, ?, ?)',
-                (phone, shop_name, shop_address)
+                'INSERT INTO retailers (retailer_phone, shop_name) VALUES (?, ?)',
+                (phone, shop_name)
             )
             
             db.commit()
@@ -305,8 +305,8 @@ def customer_register():
             
             # Create customer (no retailer linkage initially)
             db.execute(
-                'INSERT INTO customers (customer_phone, customer_name, address) VALUES (?, ?, ?)',
-                (phone, name, address)
+                'INSERT INTO customers (customer_phone, customer_name, retailer_phone) VALUES (?, ?, ?)',
+                (phone, name, 'temp_retailer')
             )
             
             db.commit()
