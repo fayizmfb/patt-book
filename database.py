@@ -1,6 +1,7 @@
 """
 Database initialization and connection management
 Handles SQLite database setup and provides connection helper
+FIXED: Phone-number based schema for Patt Book
 """
 
 import sqlite3
@@ -10,355 +11,74 @@ DATABASE = 'retail_app.db'
 
 def init_db():
     """
-    Initialize the database with required tables:
-    - customers: Customer master data
-    - credits: Credit entries with due dates
-    - payments: Payment entries
+    Initialize database with required tables:
+    - retailers: Retailer master data
+    - customers: Customer master data  
+    - transactions: Unified ledger (credit/payment)
     """
     conn = get_db()
     try:
+        # Create retailers table (Retailer Master)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS retailers (
+                retailer_phone TEXT PRIMARY KEY,
+                shop_name TEXT NOT NULL,
+                store_address TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         # Create customers table (Customer Master)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS customers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                phone TEXT,
+                customer_phone TEXT PRIMARY KEY,
+                customer_name TEXT NOT NULL,
+                retailer_phone TEXT NOT NULL,
                 address TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Create credits table (Credit Entries)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS credits (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                amount REAL NOT NULL,
-                entry_date DATE NOT NULL,
-                due_days INTEGER,
-                due_date DATE,
-                reminder_date DATE,
-                whatsapp_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES customers (id)
+                FOREIGN KEY (retailer_phone) REFERENCES retailers(retailer_phone)
             )
         """)
         
-        # Add new columns to credits table if they don't exist (migration)
-        try:
-            conn.execute("ALTER TABLE credits ADD COLUMN reminder_date DATE")
-        except:
-            pass  # Column might already exist
-        
-        try:
-            conn.execute("ALTER TABLE credits ADD COLUMN whatsapp_message TEXT")
-        except:
-            pass  # Column might already exist
-        
-        # Migration: Make due_days and due_date nullable (for simplified reminder logic)
-        try:
-            # Check if due_days is still NOT NULL by attempting to insert a test row
-            # If it fails, we need to recreate the table
-            cursor = conn.execute("PRAGMA table_info(credits)")
-            columns = cursor.fetchall()
-            
-            # Find due_days column
-            due_days_not_null = False
-            due_date_not_null = False
-            for col in columns:
-                if col[1] == 'due_days' and col[3] == 1:  # col[3] is notnull
-                    due_days_not_null = True
-                if col[1] == 'due_date' and col[3] == 1:  # col[3] is notnull
-                    due_date_not_null = True
-            
-            # If either column is still NOT NULL, recreate the table
-            if due_days_not_null or due_date_not_null:
-                print("Migrating credits table to make due_days and due_date nullable...")
-                
-                # Create new table with updated schema
-                conn.execute("""
-                    CREATE TABLE credits_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        customer_id INTEGER NOT NULL,
-                        amount REAL NOT NULL,
-                        entry_date DATE NOT NULL,
-                        due_days INTEGER,
-                        due_date DATE,
-                        reminder_date DATE,
-                        whatsapp_message TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (customer_id) REFERENCES customers (id)
-                    )
-                """)
-                
-                # Copy data from old table to new table
-                conn.execute("""
-                    INSERT INTO credits_new 
-                    (id, customer_id, amount, entry_date, due_days, due_date, reminder_date, whatsapp_message, created_at)
-                    SELECT id, customer_id, amount, entry_date, due_days, due_date, reminder_date, whatsapp_message, created_at
-                    FROM credits
-                """)
-                
-                # Drop old table and rename new table
-                conn.execute("DROP TABLE credits")
-                conn.execute("ALTER TABLE credits_new RENAME TO credits")
-                
-                print("Migration completed successfully!")
-        
-        except Exception as e:
-            print(f"Migration check failed (this is normal for new databases): {e}")
-        
-        # Create payments table (Payment Entries)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS payments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                retailer_id INTEGER,
-                amount REAL NOT NULL,
-                payment_date DATE NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES customers (id),
-                FOREIGN KEY (retailer_id) REFERENCES users (id)
-            )
-        """)
-        
-        # Migration: Add retailer_id to payments table if not exists
-        try:
-            conn.execute("ALTER TABLE payments ADD COLUMN retailer_id INTEGER REFERENCES users(id)")
-        except:
-            pass
-
-        
-        # Create transactions table (Unified transaction history)
+        # Create transactions table (Unified Ledger)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                type TEXT NOT NULL CHECK (type IN ('DEBIT', 'PAYMENT')),
+                retailer_phone TEXT NOT NULL,
+                customer_phone TEXT NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('credit', 'payment')),
                 amount REAL NOT NULL,
-                description TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES customers (id)
-            )
-        """)
-        
-        # Create settings table (for admin configuration)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS settings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                key TEXT UNIQUE NOT NULL,
-                value TEXT,
-                description TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Insert default settings if they don't exist
-        default_settings = [
-            ('default_dunning_days', '15', 'Default number of days from entry date until payment is due'),
-            ('app_name', 'Retail App', 'Application name'),
-            ('app_description', 'Simple accounting system for small retailers', 'Application description'),
-            ('admin_email', '', 'Admin email address'),
-            ('admin_phone', '', 'Admin phone number'),
-            ('store_name', 'Your Store', 'Store name (used in WhatsApp messages)'),
-            ('store_address', '', 'Store address'),
-            ('store_email', '', 'Store email address'),
-            ('whatsapp_api_url', '', 'WhatsApp Business API base URL'),
-            ('whatsapp_api_token', '', 'WhatsApp Business API access token'),
-            ('whatsapp_phone_id', '', 'WhatsApp Business Phone Number ID')
-        ]
-        
-        for key, value, description in default_settings:
-            conn.execute("""
-                INSERT OR IGNORE INTO settings (key, value, description)
-                VALUES (?, ?, ?)
-            """, (key, value, description))
-        
-        # Create retailers table (Master list of all retailers)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS retailers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT UNIQUE NOT NULL,
-                phone_number TEXT NOT NULL,
-                store_name TEXT NOT NULL,
-                store_address TEXT,
-                status TEXT DEFAULT 'active',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_active_date DATE,
-                last_login_date TIMESTAMP
-            )
-        """)
-        
-        # Create admin_users table (Admin authentication)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS admin_users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                email TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP
-            )
-        """)
-        
-        # Create audit_logs table (Admin activity tracking)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                admin_user TEXT,
-                action TEXT NOT NULL,
-                details TEXT,
-                ip_address TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Create users table (Unified user management for retailers and customers)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                phone_number TEXT UNIQUE NOT NULL,
-                user_type TEXT NOT NULL CHECK (user_type IN ('retailer', 'customer')),
-                name TEXT NOT NULL,
-                profile_photo_url TEXT,
-                address TEXT,
-                is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP,
-                fcm_token TEXT  -- Firebase Cloud Messaging token for push notifications
-            )
-        """)
-        
-        # Create retailer_profiles table (Extended retailer information)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS retailer_profiles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                store_name TEXT NOT NULL,
-                store_address TEXT,
-                store_photo_url TEXT,
-                business_type TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
-            )
-        """)
-        
-        # Modify credits table to include notes and link to retailer
-        try:
-            conn.execute("ALTER TABLE credits ADD COLUMN retailer_id INTEGER REFERENCES users(id)")
-        except:
-            pass
-        
-        try:
-            conn.execute("ALTER TABLE credits ADD COLUMN notes TEXT")
-        except:
-            pass
-        
-        # Create payment_requests table (Customer payment submissions)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS payment_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                retailer_id INTEGER NOT NULL,
-                amount REAL NOT NULL,
-                payment_mode TEXT NOT NULL, -- 'cash', 'upi', 'bank_transfer'
+                date DATE NOT NULL,
                 notes TEXT,
-                status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'rejected')),
-                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                processed_at TIMESTAMP,
-                processed_by INTEGER, -- retailer user_id who processed it
-                rejection_reason TEXT,
-                FOREIGN KEY (customer_id) REFERENCES users (id),
-                FOREIGN KEY (retailer_id) REFERENCES users (id),
-                FOREIGN KEY (processed_by) REFERENCES users (id)
-            )
-        """)
-        
-        # Create timeline_events table (Structured events for audit trail)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS timeline_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                customer_id INTEGER NOT NULL,
-                retailer_id INTEGER NOT NULL,
-                event_type TEXT NOT NULL CHECK (event_type IN ('credit_added', 'payment_requested', 'payment_confirmed', 'payment_rejected')),
-                amount REAL,
-                description TEXT,
-                metadata TEXT, -- JSON string for additional data
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (customer_id) REFERENCES users (id),
-                FOREIGN KEY (retailer_id) REFERENCES users (id)
+                FOREIGN KEY (retailer_phone) REFERENCES retailers(retailer_phone),
+                FOREIGN KEY (customer_phone) REFERENCES customers(customer_phone)
             )
         """)
         
-        # Create push_notifications table (Sent notification history)
+        # Create fcm_tokens table for push notifications
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS push_notifications (
+            CREATE TABLE IF NOT EXISTS fcm_tokens (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                title TEXT NOT NULL,
-                body TEXT NOT NULL,
-                data TEXT, -- JSON string for additional data
-                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'sent' CHECK (status IN ('sent', 'delivered', 'failed')),
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                customer_phone TEXT NOT NULL,
+                token TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (customer_phone) REFERENCES customers(customer_phone)
             )
         """)
-        
-        # Create system_settings table (Global app settings)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS system_settings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                key TEXT UNIQUE NOT NULL,
-                value TEXT,
-                description TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        
-        # Insert default system settings
-        system_settings = [
-            ('global_dunning_days', '15', 'Global default dunning days for all retailers'),
-            ('disclaimer_text', 'Patt Book does NOT collect payments. Do NOT make payments through any links.', 'Default disclaimer text'),
-            ('whatsapp_enabled', 'true', 'Enable/disable WhatsApp messaging globally'),
-            ('fcm_server_key', '', 'Firebase Cloud Messaging server key for push notifications'),
-            ('app_maintenance_mode', 'false', 'Maintenance mode for the entire app')
-        ]
-        
-        for key, value, description in system_settings:
-            conn.execute("""
-                INSERT OR IGNORE INTO system_settings (key, value, description)
-                VALUES (?, ?, ?)
-            """, (key, value, description))
-        
-        # Create default admin user (username: admin, password: admin123)
-        # In production, change this password immediately!
-        import hashlib
-        default_password_hash = hashlib.sha256('admin123'.encode()).hexdigest()
-        conn.execute("""
-            INSERT OR IGNORE INTO admin_users (username, password_hash, email)
-            VALUES ('admin', ?, 'admin@pattbook.com')
-        """, (default_password_hash,))
         
         # Create indexes for better query performance
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_credits_customer ON credits(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_payments_customer ON payments(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_retailers_user_id ON retailers(user_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_retailers_status ON retailers(status)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_admin ON audit_logs(admin_user)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone_number)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_type ON users(user_type)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_customer ON payment_requests(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_retailer ON payment_requests(retailer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_timeline_customer ON timeline_events(customer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_timeline_retailer ON timeline_events(retailer_id)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_timeline_created ON timeline_events(created_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_retailer ON transactions(retailer_phone)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_customer ON transactions(customer_phone)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_customers_retailer ON customers(retailer_phone)")
         
         conn.commit()
+        print("Database initialized successfully with phone-number based schema")
+        
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        conn.rollback()
     finally:
         conn.close()
 
@@ -371,4 +91,3 @@ def get_db():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row  # Enable dictionary-like access to rows
     return conn
-

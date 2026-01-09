@@ -1,26 +1,30 @@
 {% extends "base.html" %}
 
-{% block title %}Patt Book - Role Selection{% endblock %}
+{% block title %}Patt Book - Choose Your Role{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 500px; margin: 100px auto;">
-    <h2 style="text-align: center; margin-bottom: 30px;">Welcome to Patt Book</h2>
-    <p style="text-align: center; margin-bottom: 30px; color: #666;">
-        Please select your role to continue
-    </p>
+<div class="card" style="max-width: 600px; margin: 80px auto; text-align: center;">
+    <h2 style="margin-bottom: 40px;">Welcome to Patt Book</h2>
+    <p style="color: #666; margin-bottom: 40px;">Choose your role to continue</p>
     
-    <div style="display: flex; flex-direction: column; gap: 20px;">
-        <a href="{{ url_for('retailer_login') }}" class="btn" style="display: block; text-align: center; padding: 20px; font-size: 16px;">
-            🏪 Continue as Retailer
-        </a>
+    <div style="display: flex; gap: 30px; justify-content: center;">
+        <div style="flex: 1; max-width: 250px;">
+            <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 3em; margin-bottom: 20px;">🏪</div>
+                <h3 style="margin-bottom: 15px;">Retailer</h3>
+                <p style="color: #666; margin-bottom: 20px;">Manage customer credit accounts</p>
+                <a href="{{ url_for('retailer_login') }}" class="btn btn-success" style="width: 100%;">Continue as Retailer</a>
+            </div>
+        </div>
         
-        <a href="{{ url_for('customer_login') }}" class="btn btn-success" style="display: block; text-align: center; padding: 20px; font-size: 16px;">
-            👤 Continue as Customer
-        </a>
-    </div>
-    
-    <div style="text-align: center; margin-top: 30px; color: #999; font-size: 14px;">
-        <small>Retailers can manage customers and credit<br>Customers can view their outstanding balances</small>
+        <div style="flex: 1; max-width: 250px;">
+            <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 3em; margin-bottom: 20px;">👤</div>
+                <h3 style="margin-bottom: 15px;">Customer</h3>
+                <p style="color: #666; margin-bottom: 20px;">View your credit balances</p>
+                <a href="{{ url_for('customer_login') }}" class="btn btn-success" style="width: 100%;">Continue as Customer</a>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

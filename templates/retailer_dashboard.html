@@ -29,64 +29,40 @@
         </div>
         <div class="metric-card">
             <div class="metric-value">{{ pending_requests }}</div>
-            <div class="metric-label">Pending Payments</div>
-        </div>
     </div>
-
-    <!-- Quick Actions - MVP Structure -->
-    <h3>Quick Actions</h3>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
-        <a href="{{ url_for('add_customer') }}" class="btn btn-primary" style="text-align: center; padding: 15px;">
-            ➕ Add Customer
-        </a>
-        <a href="{{ url_for('add_payment') }}" class="btn btn-success" style="text-align: center; padding: 15px;">
-            💳 Add Payment
-        </a>
-        <a href="{{ url_for('retailer_customers') }}" class="btn btn-info" style="text-align: center; padding: 15px;">
-            👥 Creditors Details
-        </a>
-        <a href="{{ url_for('settings') }}" class="btn btn-secondary" style="text-align: center; padding: 15px;">
-            ⚙️ Settings / About App
-        </a>
-    </div>
-
-    <!-- Recent Activity -->
-    {% if recent_credits %}
-    <h3>Recent Credit Entries</h3>
+    
+    <h3 style="margin-bottom: 20px;">Recent Transactions</h3>
+    {% if transactions %}
     <table>
         <thead>
             <tr>
-                <th>Customer</th>
-                <th>Amount</th>
                 <th>Date</th>
+                <th>Customer</th>
+                <th>Type</th>
+                <th>Amount</th>
                 <th>Notes</th>
             </tr>
         </thead>
         <tbody>
-            {% for credit in recent_credits %}
+            {% for transaction in transactions %}
             <tr>
-                <td>{{ credit['customer_name'] }}</td>
-                <td class="text-right">₹{{ "%.2f"|format(credit['amount']) }}</td>
-                <td>{{ credit['entry_date'] }}</td>
-                <td>{{ credit['notes'] or '-' }}</td>
+                <td>{{ transaction.date }}</td>
+                <td>{{ transaction.customer_phone }}</td>
+                <td>
+                    <span class="transaction-type {{ transaction.type }}">
+                        {{ transaction.type.title() }}
+                    </span>
+                </td>
+                <td class="amount {{ transaction.type }}">₹{{ "%.2f"|format(transaction.amount) }}</td>
+                <td>{{ transaction.notes or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% else %}
-    <div style="text-align: center; padding: 40px; color: #666;">
-        <p>No credit entries yet. Start by adding your first customer!</p>
-    </div>
+    <p style="text-align: center; color: #666; padding: 40px;">No transactions yet. Start by adding a customer!</p>
     {% endif %}
 </div>
-
-<style>
-.metric-card {
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-    border: 1px solid #e9ecef;
 }
 
 .metric-value {

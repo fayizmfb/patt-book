@@ -1,38 +1,32 @@
 {% extends "base.html" %}
 
-{% block title %}Add Customer - Retail App{% endblock %}
+{% block title %}Add Customer - Patt Book{% endblock %}
 
 {% block content %}
-<div class="card">
-    <h2>Add New Customer</h2>
-
-    <form method="POST" action="{{ url_for('add_customer') }}" id="customerForm">
+<div class="card" style="max-width: 500px; margin: 50px auto;">
+    <h2 style="text-align: center; margin-bottom: 30px;">Add Customer</h2>
+    
+    <form method="POST" action="{{ url_for('add_customer') }}">
         <div class="form-group">
             <label for="name">Customer Name *</label>
             <input type="text" id="name" name="name" required placeholder="Enter customer name">
         </div>
-
+        
         <div class="form-group">
-            <label for="phone">Phone</label>
-            <input type="tel" id="phone" name="phone" placeholder="Enter phone number">
+            <label for="phone">Customer Phone *</label>
+            <input type="tel" id="phone" name="phone" required placeholder="Enter customer phone number">
         </div>
-
+        
         <div class="form-group">
-            <label for="address">Address</label>
-            <textarea id="address" name="address" placeholder="Enter customer address"></textarea>
+            <label for="initial_credit">Initial Credit Amount (Optional)</label>
+            <input type="number" id="initial_credit" name="initial_credit" step="0.01" min="0" placeholder="0.00">
+            <small style="color: #666;">Leave blank if no initial credit</small>
         </div>
-
+        
         <div class="actions">
-            <button type="submit" class="btn-success">Add Customer</button>
-            <a href="{{ url_for('dashboard') }}" class="btn">Cancel</a>
+            <button type="submit" class="btn btn-success">Add Customer</button>
+            <a href="{{ url_for('retailer_dashboard') }}" class="btn">Cancel</a>
         </div>
     </form>
 </div>
-
-<script>
-document.getElementById('debit_amount').addEventListener('input', function() {
-    // No due days selection needed anymore
-});
-</script>
 {% endblock %}
-

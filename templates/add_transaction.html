@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Add Transaction - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 50px auto;">
+    <h2 style="text-align: center; margin-bottom: 30px;">Add Transaction</h2>
+    
+    <form method="POST" action="{{ url_for('add_transaction') }}">
+        <div class="form-group">
+            <label for="customer_phone">Customer Phone *</label>
+            <input type="tel" id="customer_phone" name="customer_phone" required placeholder="Enter customer phone number">
+        </div>
+        
+        <div class="form-group">
+            <label for="type">Transaction Type *</label>
+            <select id="type" name="type" required>
+                <option value="">Select transaction type</option>
+                <option value="credit">Credit (Add to customer balance)</option>
+                <option value="payment">Payment (Reduce customer balance)</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="amount">Amount *</label>
+            <input type="number" id="amount" name="amount" step="0.01" min="0" required placeholder="0.00">
+        </div>
+        
+        <div class="form-group">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="3" placeholder="Optional notes about this transaction"></textarea>
+        </div>
+        
+        <div class="actions">
+            <button type="submit" class="btn btn-success">Add Transaction</button>
+            <a href="{{ url_for('retailer_dashboard') }}" class="btn">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
