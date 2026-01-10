@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Patt Book - Retailer App{% endblock %}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            padding: 40px;
+            margin: 20px 0;
+            backdrop-filter: blur(10px);
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            font-size: 2.5em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .logo p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            text-align: center;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #333;
+            border: 2px solid #e1e5e9;
+        }
+        
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #fcc;
+        }
+        
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #cfc;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .otp-input {
+            font-size: 24px;
+            text-align: center;
+            letter-spacing: 8px;
+            font-weight: bold;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e1e5e9;
+        }
+        
+        .auth-tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .auth-tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .auth-content {
+            display: none;
+        }
+        
+        .auth-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="logo">
+                <h1>📋 Patt Book</h1>
+                <p>Retailer Credit Management</p>
+            </div>
+            
+            <div id="messageContainer"></div>
+            
+            {% block content %}
+<!-- Auth Tabs -->
+<div class="auth-tabs">
+    <div class="auth-tab active" onclick="switchTab('login')">Login</div>
+    <div class="auth-tab" onclick="switchTab('signup')">Signup</div>
+</div>
+
+<!-- Login Form -->
+<div id="loginForm" class="auth-content active">
+    <form id="loginFormElement">
+        <div class="form-group">
+            <label for="loginPhone">Mobile Number *</label>
+            <input type="tel" id="loginPhone" name="phone" required 
+                   placeholder="Enter your mobile number" maxlength="10">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" id="loginBtn">
+            Send WhatsApp OTP
+        </button>
+    </form>
+    
+    <!-- OTP Verification -->
+    <div id="loginOtpForm" class="hidden">
+        <h3 style="text-align: center; margin-bottom: 20px;">Verify OTP</h3>
+        <p style="text-align: center; color: #666; margin-bottom: 20px;">
+            Enter the 6-digit OTP sent to your WhatsApp
+        </p>
+        
+        <form id="loginOtpFormElement">
+            <div class="form-group">
+                <input type="text" id="loginOtp" name="otp" required 
+                       placeholder="Enter 6-digit OTP" maxlength="6" 
+                       class="otp-input">
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Verify & Login</button>
+            <button type="button" class="btn btn-secondary" onclick="resendLoginOTP()" 
+                    style="margin-top: 10px;">Resend OTP</button>
+        </form>
+    </div>
+</div>
+
+<!-- Signup Form -->
+<div id="signupForm" class="auth-content">
+    <form id="signupFormElement">
+        <div class="form-group">
+            <label for="signupPhone">Mobile Number *</label>
+            <input type="tel" id="signupPhone" name="phone" required 
+                   placeholder="Enter your mobile number" maxlength="10">
+        </div>
+        
+        <div class="form-group">
+            <label for="shopName">Shop Name *</label>
+            <input type="text" id="shopName" name="shop_name" required 
+                   placeholder="Enter your shop name">
+        </div>
+        
+        <div class="form-group">
+            <label for="shopAddress">Shop Address *</label>
+            <textarea id="shopAddress" name="shop_address" required 
+                      placeholder="Enter your shop address" rows="3"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="shopPhoto">Shop Photo (Optional)</label>
+            <input type="file" id="shopPhoto" name="shop_photo" accept="image/*">
+            <small style="color: #666;">Upload your shop photo (optional)</small>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" id="signupBtn">
+            Send WhatsApp OTP
+        </button>
+    </form>
+    
+    <!-- OTP Verification -->
+    <div id="signupOtpForm" class="hidden">
+        <h3 style="text-align: center; margin-bottom: 20px;">Verify OTP</h3>
+        <p style="text-align: center; color: #666; margin-bottom: 20px;">
+            Enter the 6-digit OTP sent to your WhatsApp
+        </p>
+        
+        <form id="signupOtpFormElement">
+            <div class="form-group">
+                <input type="text" id="signupOtp" name="otp" required 
+                       placeholder="Enter 6-digit OTP" maxlength="6" 
+                       class="otp-input">
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Verify & Create Account</button>
+            <button type="button" class="btn btn-secondary" onclick="resendSignupOTP()" 
+                    style="margin-top: 10px;">Resend OTP</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+        </div>
+    </div>
+
+    <script>
+        // Global functions
+        function showMessage(message, type = 'error') {
+            const container = document.getElementById('messageContainer');
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = message;
+            container.appendChild(div);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                div.remove();
+            }, 5000);
+        }
+        
+        function clearMessages() {
+            document.getElementById('messageContainer').innerHTML = '';
+        }
+        
+        async function postJSON(url, data) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Request failed');
+            }
+            
+            return response.json();
+        }
+        
+        function getAuthHeaders() {
+            const token = localStorage.getItem('patt_book_token');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            };
+        }
+        
+        async function authenticatedPost(url, data) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(data)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Request failed');
+            }
+            
+            return response.json();
+        }
+        
+        async function authenticatedGet(url) {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: getAuthHeaders()
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Request failed');
+            }
+            
+            return response.json();
+        }
+        
+        function setAuthToken(token) {
+            localStorage.setItem('patt_book_token', token);
+        }
+        
+        function getAuthToken() {
+            return localStorage.getItem('patt_book_token');
+        }
+        
+        function clearAuthToken() {
+            localStorage.removeItem('patt_book_token');
+        }
+        
+        function isAuthenticated() {
+            return !!getAuthToken();
+        }
+        
+        function redirectToDashboard() {
+            window.location.href = '/dashboard';
+        }
+        
+        // Auto-format phone number
+        function formatPhoneNumber(input) {
+            let value = input.value.replace(/\D/g, '');
+            if (value.length > 10) {
+                value = value.slice(0, 10);
+            }
+            input.value = value;
+        }
+        
+        // Check authentication on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            if (isAuthenticated() && window.location.pathname !== '/dashboard') {
+                redirectToDashboard();
+            }
+        });
+    </script>
+    
+    {% block extra_js %}
+    <script>
+    let currentLoginPhone = '';
+    let currentSignupData = {};
+
+    // Tab switching
+    function switchTab(tab) {
+        // Update tabs
+        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.auth-content').forEach(c => c.classList.remove('active'));
+        
+        if (tab === 'login') {
+            document.querySelector('.auth-tab:first-child').classList.add('active');
+            document.getElementById('loginForm').classList.add('active');
+        } else {
+            document.querySelector('.auth-tab:last-child').classList.add('active');
+            document.getElementById('signupForm').classList.add('active');
+        }
+        
+        clearMessages();
+    }
+
+    // Login form submission
+    document.getElementById('loginFormElement').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const phone = document.getElementById('loginPhone').value.trim();
+        
+        if (!phone || phone.length !== 10) {
+            showMessage('Please enter a valid 10-digit mobile number');
+            return;
+        }
+        
+        try {
+            document.getElementById('loginBtn').disabled = true;
+            document.getElementById('loginBtn').textContent = 'Sending OTP...';
+            
+            const response = await postJSON('/api/auth/login', { phone });
+            
+            if (response.success) {
+                currentLoginPhone = response.phone;
+                showMessage(response.message, 'success');
+                
+                // Show OTP form
+                document.getElementById('loginFormElement').parentElement.classList.add('hidden');
+                document.getElementById('loginOtpForm').classList.remove('hidden');
+                document.getElementById('loginOtp').focus();
+            } else {
+                showMessage(response.message);
+            }
+        } catch (error) {
+            showMessage(error.message);
+        } finally {
+            document.getElementById('loginBtn').disabled = false;
+            document.getElementById('loginBtn').textContent = 'Send WhatsApp OTP';
+        }
+    });
+
+    // Login OTP verification
+    document.getElementById('loginOtpFormElement').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const otp = document.getElementById('loginOtp').value.trim();
+        
+        if (!otp || otp.length !== 6) {
+            showMessage('Please enter a valid 6-digit OTP');
+            return;
+        }
+        
+        try {
+            const response = await postJSON('/api/auth/verify-login-otp', { otp });
+            
+            if (response.success) {
+                showMessage(response.message, 'success');
+                setAuthToken(response.token);
+                
+                // Store retailer data
+                localStorage.setItem('patt_book_retailer', JSON.stringify(response.retailer));
+                
+                // Redirect to dashboard
+                setTimeout(() => {
+                    redirectToDashboard();
+                }, 1000);
+            } else {
+                showMessage(response.message);
+            }
+        } catch (error) {
+            showMessage(error.message);
+        }
+    });
+
+    // Signup form submission
+    document.getElementById('signupFormElement').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const phone = document.getElementById('signupPhone').value.trim();
+        const shopName = document.getElementById('shopName').value.trim();
+        const shopAddress = document.getElementById('shopAddress').value.trim();
+        const shopPhotoFile = document.getElementById('shopPhoto').files[0];
+        
+        if (!phone || phone.length !== 10) {
+            showMessage('Please enter a valid 10-digit mobile number');
+            return;
+        }
+        
+        if (!shopName) {
+            showMessage('Please enter your shop name');
+            return;
+        }
+        
+        if (!shopAddress) {
+            showMessage('Please enter your shop address');
+            return;
+        }
+        
+        try {
+            document.getElementById('signupBtn').disabled = true;
+            document.getElementById('signupBtn').textContent = 'Sending OTP...';
+            
+            // Handle photo upload (simplified for MVP)
+            let shopPhotoUrl = '';
+            if (shopPhotoFile) {
+                // For MVP, we'll just store a placeholder
+                shopPhotoUrl = 'uploaded_photo_' + Date.now();
+            }
+            
+            const response = await postJSON('/api/auth/signup', {
+                phone,
+                shop_name: shopName,
+                shop_address: shopAddress,
+                shop_photo_url: shopPhotoUrl
+            });
+            
+            if (response.success) {
+                currentSignupData = {
+                    phone,
+                    shopName,
+                    shopAddress,
+                    shopPhotoUrl
+                };
+                
+                showMessage(response.message, 'success');
+                
+                // Show OTP form
+                document.getElementById('signupFormElement').parentElement.classList.add('hidden');
+                document.getElementById('signupOtpForm').classList.remove('hidden');
+                document.getElementById('signupOtp').focus();
+            } else {
+                showMessage(response.message);
+            }
+        } catch (error) {
+            showMessage(error.message);
+        } finally {
+            document.getElementById('signupBtn').disabled = false;
+            document.getElementById('signupBtn').textContent = 'Send WhatsApp OTP';
+        }
+    });
+
+    // Signup OTP verification
+    document.getElementById('signupOtpFormElement').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const otp = document.getElementById('signupOtp').value.trim();
+        
+        if (!otp || otp.length !== 6) {
+            showMessage('Please enter a valid 6-digit OTP');
+            return;
+        }
+        
+        try {
+            const response = await postJSON('/api/auth/verify-signup-otp', { otp });
+            
+            if (response.success) {
+                showMessage(response.message, 'success');
+                setAuthToken(response.token);
+                
+                // Store retailer data
+                localStorage.setItem('patt_book_retailer', JSON.stringify(response.retailer));
+                
+                // Redirect to dashboard
+                setTimeout(() => {
+                    redirectToDashboard();
+                }, 1000);
+            } else {
+                showMessage(response.message);
+            }
+        } catch (error) {
+            showMessage(error.message);
+        }
+    });
+
+    // Resend OTP functions
+    async function resendLoginOTP() {
+        if (!currentLoginPhone) {
+            showMessage('Please enter your phone number first');
+            return;
+        }
+        
+        try {
+            const response = await postJSON('/api/auth/login', { phone: currentLoginPhone });
+            
+            if (response.success) {
+                showMessage('OTP resent to your WhatsApp', 'success');
+            } else {
+                showMessage(response.message);
+            }
+        } catch (error) {
+            showMessage(error.message);
+        }
+    }
+
+    async function resendSignupOTP() {
+        if (!currentSignupData.phone) {
+            showMessage('Please complete the signup form first');
+            return;
+        }
+        
+        try {
+            const response = await postJSON('/api/auth/signup', currentSignupData);
+            
+            if (response.success) {
+                showMessage('OTP resent to your WhatsApp', 'success');
+            } else {
+                showMessage(response.message);
+            }
+        } catch (error) {
+            showMessage(error.message);
+        }
+    }
+
+    // Phone number formatting
+    document.getElementById('loginPhone').addEventListener('input', function() {
+        formatPhoneNumber(this);
+    });
+
+    document.getElementById('signupPhone').addEventListener('input', function() {
+        formatPhoneNumber(this);
+    });
+
+    // Auto-submit OTP when 6 digits entered
+    document.getElementById('loginOtp').addEventListener('input', function() {
+        if (this.value.length === 6) {
+            document.getElementById('loginOtpFormElement').dispatchEvent(new Event('submit'));
+        }
+    });
+
+    document.getElementById('signupOtp').addEventListener('input', function() {
+        if (this.value.length === 6) {
+            document.getElementById('signupOtpFormElement').dispatchEvent(new Event('submit'));
+        }
+    });
+    </script>
+    {% endblock %}
+</body>
+</html>

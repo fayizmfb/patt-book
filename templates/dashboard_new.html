@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Patt Book</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .shop-info h1 {
+            font-size: 1.8em;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .shop-info p {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .logout-btn:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 30px;
+            height: calc(100vh - 200px);
+            min-height: 500px;
+        }
+        
+        .dashboard-box {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .dashboard-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+        
+        .dashboard-box:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.2);
+        }
+        
+        .dashboard-box h2 {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .dashboard-box p {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .dashboard-box .icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 20px 20px 0 0;
+            text-align: center;
+        }
+        
+        .modal-header h2 {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+        
+        .modal-body {
+            padding: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            text-align: center;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #333;
+            border: 2px solid #e1e5e9;
+        }
+        
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+        
+        .close {
+            color: white;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s;
+        }
+        
+        .close:hover {
+            opacity: 1;
+        }
+        
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+        
+        .success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+        
+        .debtor-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .debtor-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .debtor-info h4 {
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .debtor-info p {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .debtor-amount {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .sort-options {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .sort-btn {
+            padding: 8px 16px;
+            border: 2px solid #e1e5e9;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+        
+        .sort-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .settings-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .settings-info h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+        
+        .settings-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e1e5e9;
+        }
+        
+        .settings-item:last-child {
+            border-bottom: none;
+        }
+        
+        .settings-item strong {
+            color: #333;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .settings-item span {
+            color: #666;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: repeat(4, 1fr);
+                gap: 20px;
+                height: auto;
+            }
+            
+            .dashboard-box {
+                padding: 30px 20px;
+            }
+            
+            .dashboard-box h2 {
+                font-size: 2em;
+            }
+            
+            .dashboard-box .icon {
+                font-size: 3em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-content">
+            <div class="shop-info">
+                <h1 id="shopName">Loading...</h1>
+                <p id="shopPhone">Loading...</p>
+            </div>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <!-- Dashboard Grid -->
+    <div class="container">
+        <div class="dashboard-grid">
+            <!-- Add Debtor -->
+            <div class="dashboard-box" onclick="openAddDebtorModal()">
+                <div class="icon">➕</div>
+                <h2>Add Debtor</h2>
+                <p>Add new customer or update existing</p>
+            </div>
+
+            <!-- Add Payment -->
+            <div class="dashboard-box" onclick="openAddPaymentModal()">
+                <div class="icon">💰</div>
+                <h2>Add Payment</h2>
+                <p>Record customer payments</p>
+            </div>
+
+            <!-- Debtors List -->
+            <div class="dashboard-box" onclick="openDebtorsListModal()">
+                <div class="icon">📋</div>
+                <h2>Debtors List</h2>
+                <p>View all customers and balances</p>
+            </div>
+
+            <!-- Settings -->
+            <div class="dashboard-box" onclick="openSettingsModal()">
+                <div class="icon">⚙️</div>
+                <h2>Settings</h2>
+                <p>Shop information and details</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Debtor Modal -->
+    <div id="addDebtorModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeModal('addDebtorModal')">&times;</span>
+                <h2>Add Debtor</h2>
+                <p>Add new customer or update existing</p>
+            </div>
+            <div class="modal-body">
+                <div id="addDebtorMessage"></div>
+                
+                <div class="form-group">
+                    <label for="addMethod">Add Method</label>
+                    <select id="addMethod" onchange="toggleAddMethod()">
+                        <option value="manual">Manual Entry</option>
+                        <option value="contacts">From Contacts</option>
+                    </select>
+                </div>
+                
+                <div id="manualEntry">
+                    <div class="form-group">
+                        <label for="debtorName">Customer Name *</label>
+                        <input type="text" id="debtorName" placeholder="Enter customer name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="debtorPhone">Customer Mobile Number *</label>
+                        <input type="tel" id="debtorPhone" placeholder="Enter mobile number" maxlength="10">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="creditAmount">Credit Amount *</label>
+                        <input type="number" id="creditAmount" placeholder="Enter credit amount" min="1" step="0.01">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="creditDescription">Description</label>
+                        <textarea id="creditDescription" placeholder="Enter description (optional)" rows="3"></textarea>
+                    </div>
+                </div>
+                
+                <div id="contactsEntry" class="hidden">
+                    <div class="form-group">
+                        <label for="contactSearch">Search Contacts</label>
+                        <input type="text" id="contactSearch" placeholder="Type to search contacts...">
+                        <small style="color: #666;">Contact integration coming soon</small>
+                    </div>
+                </div>
+                
+                <button class="btn btn-primary" onclick="addDebtor()">Add Debtor</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Payment Modal -->
+    <div id="addPaymentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeModal('addPaymentModal')">&times;</span>
+                <h2>Add Payment</h2>
+                <p>Record customer payment</p>
+            </div>
+            <div class="modal-body">
+                <div id="addPaymentMessage"></div>
+                
+                <div class="form-group">
+                    <label for="paymentDebtor">Select Debtor</label>
+                    <select id="paymentDebtor">
+                        <option value="">Select a debtor...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="paymentAmount">Payment Amount *</label>
+                    <input type="number" id="paymentAmount" placeholder="Enter payment amount" min="1" step="0.01">
+                </div>
+                
+                <button class="btn btn-primary" onclick="addPayment()">Record Payment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debtors List Modal -->
+    <div id="debtorsListModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeModal('debtorsListModal')">&times;</span>
+                <h2>Debtors List</h2>
+                <p>View all customers and balances</p>
+            </div>
+            <div class="modal-body">
+                <div id="debtorsListMessage"></div>
+                
+                <div class="sort-options">
+                    <button class="sort-btn active" onclick="sortDebtors('name', 'asc')">Name (A-Z)</button>
+                    <button class="sort-btn" onclick="sortDebtors('name', 'desc')">Name (Z-A)</button>
+                    <button class="sort-btn" onclick="sortDebtors('amount', 'asc')">Amount (Low-High)</button>
+                    <button class="sort-btn" onclick="sortDebtors('amount', 'desc')">Amount (High-Low)</button>
+                    <button class="sort-btn" onclick="sortDebtors('created_at', 'desc')">New-Old</button>
+                    <button class="sort-btn" onclick="sortDebtors('created_at', 'asc')">Old-New</button>
+                </div>
+                
+                <div class="debtor-list" id="debtorsList">
+                    <!-- Debtors will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="close" onclick="closeModal('settingsModal')">&times;</span>
+                <h2>Settings</h2>
+                <p>Shop information and details</p>
+            </div>
+            <div class="modal-body">
+                <div class="settings-info" id="settingsInfo">
+                    <!-- Settings will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentRetailer = null;
+        let debtors = [];
+        let currentSort = { field: 'name', order: 'asc' };
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!isAuthenticated()) {
+                window.location.href = '/';
+                return;
+            }
+            
+            loadRetailerInfo();
+            loadDebtors();
+        });
+
+        // Load retailer information
+        async function loadRetailerInfo() {
+            try {
+                const response = await authenticatedGet('/api/settings');
+                if (response.success) {
+                    currentRetailer = response.retailer;
+                    document.getElementById('shopName').textContent = currentRetailer.shop_name;
+                    document.getElementById('shopPhone').textContent = currentRetailer.phone;
+                }
+            } catch (error) {
+                console.error('Failed to load retailer info:', error);
+            }
+        }
+
+        // Load debtors
+        async function loadDebtors() {
+            try {
+                const response = await authenticatedGet('/api/debtors');
+                if (response.success) {
+                    debtors = response.debtors;
+                    updatePaymentDebtorSelect();
+                    updateDebtorsList();
+                }
+            } catch (error) {
+                console.error('Failed to load debtors:', error);
+            }
+        }
+
+        // Modal functions
+        function openAddDebtorModal() {
+            document.getElementById('addDebtorModal').style.display = 'block';
+        }
+
+        function openAddPaymentModal() {
+            document.getElementById('addPaymentModal').style.display = 'block';
+        }
+
+        function openDebtorsListModal() {
+            document.getElementById('debtorsListModal').style.display = 'block';
+        }
+
+        function openSettingsModal() {
+            document.getElementById('settingsModal').style.display = 'block';
+            loadSettings();
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Add debtor
+        async function addDebtor() {
+            const name = document.getElementById('debtorName').value.trim();
+            const phone = document.getElementById('debtorPhone').value.trim();
+            const amount = parseFloat(document.getElementById('creditAmount').value);
+            const description = document.getElementById('creditDescription').value.trim();
+
+            if (!name || !phone || !amount) {
+                showMessage('addDebtorMessage', 'Please fill in all required fields', 'error');
+                return;
+            }
+
+            if (phone.length !== 10) {
+                showMessage('addDebtorMessage', 'Please enter a valid 10-digit phone number', 'error');
+                return;
+            }
+
+            try {
+                const response = await authenticatedPost('/api/debtors', {
+                    name,
+                    phone,
+                    credit_amount: amount,
+                    description
+                });
+
+                if (response.success) {
+                    showMessage('addDebtorMessage', response.message, 'success');
+                    clearAddDebtorForm();
+                    loadDebtors();
+                    
+                    setTimeout(() => {
+                        closeModal('addDebtorModal');
+                    }, 2000);
+                } else {
+                    showMessage('addDebtorMessage', response.message, 'error');
+                }
+            } catch (error) {
+                showMessage('addDebtorMessage', error.message, 'error');
+            }
+        }
+
+        // Add payment
+        async function addPayment() {
+            const debtorId = document.getElementById('paymentDebtor').value;
+            const amount = parseFloat(document.getElementById('paymentAmount').value);
+
+            if (!debtorId || !amount) {
+                showMessage('addPaymentMessage', 'Please select a debtor and enter payment amount', 'error');
+                return;
+            }
+
+            try {
+                const response = await authenticatedPost('/api/payments', {
+                    debtor_id: debtorId,
+                    amount
+                });
+
+                if (response.success) {
+                    showMessage('addPaymentMessage', response.message, 'success');
+                    clearAddPaymentForm();
+                    loadDebtors();
+                    
+                    setTimeout(() => {
+                        closeModal('addPaymentModal');
+                    }, 2000);
+                } else {
+                    showMessage('addPaymentMessage', response.message, 'error');
+                }
+            } catch (error) {
+                showMessage('addPaymentMessage', error.message, 'error');
+            }
+        }
+
+        // Sort debtors
+        async function sortDebtors(field, order) {
+            currentSort = { field, order };
+            
+            // Update active button
+            document.querySelectorAll('.sort-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Reload debtors with sort
+            try {
+                const response = await authenticatedGet(`/api/debtors?sort=${field}&order=${order}`);
+                if (response.success) {
+                    debtors = response.debtors;
+                    updateDebtorsList();
+                }
+            } catch (error) {
+                console.error('Failed to sort debtors:', error);
+            }
+        }
+
+        // Load settings
+        async function loadSettings() {
+            if (!currentRetailer) return;
+            
+            const settingsHtml = `
+                <h3>Shop Information</h3>
+                <div class="settings-item">
+                    <strong>Mobile Number</strong>
+                    <span>${currentRetailer.phone}</span>
+                </div>
+                <div class="settings-item">
+                    <strong>Shop Name</strong>
+                    <span>${currentRetailer.shop_name}</span>
+                </div>
+                <div class="settings-item">
+                    <strong>Shop Address</strong>
+                    <span>${currentRetailer.shop_address}</span>
+                </div>
+                <div class="settings-item">
+                    <strong>Shop Photo</strong>
+                    <span>${currentRetailer.shop_photo_url || 'No photo uploaded'}</span>
+                </div>
+            `;
+            
+            document.getElementById('settingsInfo').innerHTML = settingsHtml;
+        }
+
+        // Helper functions
+        function showMessage(containerId, message, type) {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = message;
+            container.innerHTML = '';
+            container.appendChild(div);
+            
+            setTimeout(() => {
+                div.remove();
+            }, 5000);
+        }
+
+        function clearAddDebtorForm() {
+            document.getElementById('debtorName').value = '';
+            document.getElementById('debtorPhone').value = '';
+            document.getElementById('creditAmount').value = '';
+            document.getElementById('creditDescription').value = '';
+        }
+
+        function clearAddPaymentForm() {
+            document.getElementById('paymentDebtor').value = '';
+            document.getElementById('paymentAmount').value = '';
+        }
+
+        function updatePaymentDebtorSelect() {
+            const select = document.getElementById('paymentDebtor');
+            select.innerHTML = '<option value="">Select a debtor...</option>';
+            
+            debtors.forEach(debtor => {
+                const option = document.createElement('option');
+                option.value = debtor.id;
+                option.textContent = `${debtor.name} (₹${debtor.total_due})`;
+                select.appendChild(option);
+            });
+        }
+
+        function updateDebtorsList() {
+            const list = document.getElementById('debtorsList');
+            
+            if (debtors.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: #666;">No debtors found</p>';
+                return;
+            }
+            
+            list.innerHTML = debtors.map(debtor => `
+                <div class="debtor-item">
+                    <div class="debtor-info">
+                        <h4>${debtor.name}</h4>
+                        <p>${debtor.phone}</p>
+                    </div>
+                    <div class="debtor-amount">₹${debtor.total_due}</div>
+                </div>
+            `).join('');
+        }
+
+        function toggleAddMethod() {
+            const method = document.getElementById('addMethod').value;
+            const manualEntry = document.getElementById('manualEntry');
+            const contactsEntry = document.getElementById('contactsEntry');
+            
+            if (method === 'manual') {
+                manualEntry.classList.remove('hidden');
+                contactsEntry.classList.add('hidden');
+            } else {
+                manualEntry.classList.add('hidden');
+                contactsEntry.classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            clearAuthToken();
+            window.location.href = '/';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+
+        // Phone number formatting
+        document.getElementById('debtorPhone').addEventListener('input', function() {
+            this.value = this.value.replace(/\D/g, '').slice(0, 10);
+        });
+
+        // Global auth functions (from base template)
+        function isAuthenticated() {
+            return !!localStorage.getItem('patt_book_token');
+        }
+
+        function getAuthHeaders() {
+            const token = localStorage.getItem('patt_book_token');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            };
+        }
+
+        async function authenticatedPost(url, data) {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(data)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Request failed');
+            }
+            
+            return response.json();
+        }
+
+        async function authenticatedGet(url) {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: getAuthHeaders()
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Request failed');
+            }
+            
+            return response.json();
+        }
+
+        function clearAuthToken() {
+            localStorage.removeItem('patt_book_token');
+            localStorage.removeItem('patt_book_retailer');
+        }
+    </script>
+</body>
+</html>
