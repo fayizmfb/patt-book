@@ -1,30 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Patt Book - Choose Your Role{% endblock %}
+{% block title %}Patt Book - Retailer Portal{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 600px; margin: 80px auto; text-align: center;">
+<div class="card" style="max-width: 500px; margin: 80px auto; text-align: center;">
     <h2 style="margin-bottom: 40px;">Welcome to Patt Book</h2>
-    <p style="color: #666; margin-bottom: 40px;">Choose your role to continue</p>
+    <p style="color: #666; margin-bottom: 40px;">Retailer Portal - Manage your customer credit accounts</p>
     
-    <div style="display: flex; gap: 30px; justify-content: center;">
-        <div style="flex: 1; max-width: 250px;">
-            <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
-                <div style="font-size: 3em; margin-bottom: 20px;">🏪</div>
-                <h3 style="margin-bottom: 15px;">Retailer</h3>
-                <p style="color: #666; margin-bottom: 20px;">Manage customer credit accounts</p>
-                <a href="{{ url_for('retailer_login') }}" class="btn btn-success" style="width: 100%;">Continue as Retailer</a>
-            </div>
-        </div>
-        
-        <div style="flex: 1; max-width: 250px;">
-            <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
-                <div style="font-size: 3em; margin-bottom: 20px;">👤</div>
-                <h3 style="margin-bottom: 15px;">Customer</h3>
-                <p style="color: #666; margin-bottom: 20px;">View your credit balances</p>
-                <a href="{{ url_for('customer_login') }}" class="btn btn-success" style="width: 100%;">Continue as Customer</a>
-            </div>
-        </div>
+    <div style="background: #f8f9fa; padding: 40px; border-radius: 8px; text-align: center;">
+        <div style="font-size: 4em; margin-bottom: 20px;">🏪</div>
+        <h3 style="margin-bottom: 15px;">Retailer Login</h3>
+        <p style="color: #666; margin-bottom: 30px;">Access your Patt Book dashboard</p>
+        <a href="/retailer-auth" class="btn btn-success" style="width: 100%; font-size: 1.1em; padding: 15px;">Login as Retailer</a>
     </div>
 </div>
 {% endblock %}

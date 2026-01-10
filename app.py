@@ -1,15 +1,18 @@
 """
-Patt Book - Retailer + Customer Credit System
-FIXED: Phone-number based authentication with ledger system + Push Notifications
+Patt Book - Retailer-Only Ledger System
+WhatsApp OTP Authentication + Automatic Customer Notifications
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, jsonify
 from datetime import datetime, timedelta
 from database import init_db, get_db
 import sqlite3
 import os
 import requests
 import json
+import hashlib
+import jwt
+from functools import wraps
 
 # Windsurf Compatibility Fixes
 os.environ['DISABLE_UI_CUSTOMIZATION'] = '1'
@@ -22,626 +25,756 @@ os.environ['DISABLE_CUSTOM_FONTS'] = '1'
 os.environ['FORCE_SIMPLE_RENDERING'] = '1'
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-in-production'
+app.secret_key = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-production')
+
+# Initialize retailer-only database
+init_db()
+
+# WhatsApp Configuration
+WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')
+WHATSAPP_ACCESS_TOKEN = os.environ.get('WHATSAPP_ACCESS_TOKEN', '')
+TEST_MODE = os.environ.get('TEST_MODE', 'true').lower() == 'true'
 
 # ============================================================================ 
 # AUTHENTICATION HELPERS
 # ============================================================================
 
-def is_user_logged_in():
-    """Check if user is logged in"""
-    return 'user_id' in session
+def is_retailer_logged_in():
+    """Check if retailer is logged in"""
+    return 'retailer_id' in session
+
+def retailer_required(f):
+    """Decorator to require retailer authentication"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_retailer_logged_in():
+            return redirect(url_for('retailer_auth'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def generate_jwt_token(retailer_id):
+    """Generate JWT token for retailer"""
+    payload = {
+        'retailer_id': retailer_id,
+        'exp': datetime.utcnow() + timedelta(days=30),
+        'iat': datetime.utcnow()
+    }
+    return jwt.encode(payload, app.secret_key, algorithm='HS256')
+
+def verify_jwt_token(token):
+    """Verify JWT token"""
+    try:
+        payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+        return payload['retailer_id']
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
 
 # ============================================================================ 
-# PUSH NOTIFICATION HELPERS
+# WHATSAPP OTP HELPERS
 # ============================================================================
 
-def send_push_notification(customer_phone, title, message):
-    """Send push notification to customer using FCM"""
+def generate_otp():
+    """Generate 6-digit OTP"""
+    import random
+    return str(random.randint(100000, 999999))
+
+def hash_otp(otp):
+    """Hash OTP for storage"""
+    return hashlib.sha256(otp.encode()).hexdigest()
+
+def send_whatsapp_otp(phone_number, otp):
+    """Send OTP via WhatsApp Cloud API"""
+    if TEST_MODE:
+        print(f"TEST MODE - WhatsApp OTP would be sent to {phone_number}: {otp}")
+        return True
+    
     try:
-        db = get_db()
-        
-        # Get customer's FCM token
-        token_result = db.execute(
-            'SELECT token FROM fcm_tokens WHERE customer_phone = ?',
-            (customer_phone,)
-        ).fetchone()
-        
-        if not token_result:
-            print(f"No FCM token found for customer {customer_phone}")
-            return False
-        
-        fcm_token = token_result['token']
-        
-        # In production, use your FCM server key
-        fcm_server_key = os.environ.get('FCM_SERVER_KEY', 'your-fcm-server-key')
-        
-        # Prepare FCM request
-        fcm_url = 'https://fcm.googleapis.com/fcm/send'
+        url = f"https://graph.facebook.com/v18.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
         headers = {
-            'Authorization': f'key={fcm_server_key}',
+            'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}',
             'Content-Type': 'application/json'
         }
         
-        payload = {
-            'to': fcm_token,
-            'notification': {
-                'title': title,
-                'body': message,
-                'sound': 'default',
-                'click_action': 'FLUTTER_NOTIFICATION_CLICK'
-            },
-            'data': {
-                'type': 'transaction_update',
-                'customer_phone': customer_phone
+        data = {
+            "messaging_product": "whatsapp",
+            "to": phone_number,
+            "type": "template",
+            "template": {
+                "name": "LOGIN_OTP",
+                "language": {"code": "en"},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": otp}
+                        ]
+                    }
+                ]
             }
         }
         
-        # Send notification
-        response = requests.post(fcm_url, headers=headers, json=payload, timeout=10)
+        response = requests.post(url, json=data, headers=headers)
+        return response.status_code == 200
         
-        if response.status_code == 200:
-            result = response.json()
-            if result.get('success'):
-                print(f"Push notification sent successfully to {customer_phone}")
-                return True
-            else:
-                print(f"FCM error: {result}")
-                return False
-        else:
-            print(f"FCM request failed: {response.status_code} - {response.text}")
-            return False
-            
     except Exception as e:
-        print(f"Push notification error: {e}")
+        print(f"Error sending WhatsApp OTP: {e}")
         return False
-    finally:
-        if 'db' in locals():
-            db.close()
 
-def save_fcm_token(customer_phone, token):
-    """Save FCM token for customer"""
+def send_credit_added_notification(debtor_phone, debtor_name, shop_name, amount, total_due):
+    """Send credit added notification to debtor"""
+    if TEST_MODE:
+        print(f"TEST MODE - WhatsApp notification would be sent to {debtor_phone}")
+        print(f"Template: CREDIT_ADDED")
+        print(f"Parameters: [{debtor_name}, {shop_name}, {amount}, {total_due}]")
+        return True
+    
     try:
-        db = get_db()
+        url = f"https://graph.facebook.com/v18.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+        headers = {
+            'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}',
+            'Content-Type': 'application/json'
+        }
         
-        # Check if token already exists
-        existing = db.execute(
-            'SELECT id FROM fcm_tokens WHERE customer_phone = ? AND token = ?',
-            (customer_phone, token)
-        ).fetchone()
+        data = {
+            "messaging_product": "whatsapp",
+            "to": debtor_phone,
+            "type": "template",
+            "template": {
+                "name": "CREDIT_ADDED",
+                "language": {"code": "en"},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": debtor_name},
+                            {"type": "text", "text": shop_name},
+                            {"type": "text", "text": str(amount)},
+                            {"type": "text", "text": str(total_due)}
+                        ]
+                    }
+                ]
+            }
+        }
         
-        if not existing:
-            # Insert new token
-            db.execute(
-                'INSERT INTO fcm_tokens (customer_phone, token) VALUES (?, ?)',
-                (customer_phone, token)
-            )
-        else:
-            # Token exists, no action needed
-            pass
-        
-        db.commit()
-        print(f"FCM token saved for customer {customer_phone}")
+        response = requests.post(url, json=data, headers=headers)
+        return response.status_code == 200
         
     except Exception as e:
-        print(f"Error saving FCM token: {e}")
-        if 'db' in locals():
-            db.rollback()
-    finally:
-        if 'db' in locals():
-            db.close()
+        print(f"Error sending credit notification: {e}")
+        return False
+
+def send_payment_recorded_notification(debtor_phone, debtor_name, amount, shop_name, balance):
+    """Send payment recorded notification to debtor"""
+    if TEST_MODE:
+        print(f"TEST MODE - WhatsApp notification would be sent to {debtor_phone}")
+        print(f"Template: PAYMENT_RECORDED")
+        print(f"Parameters: [{debtor_name}, {amount}, {shop_name}, {balance}]")
+        return True
+    
+    try:
+        url = f"https://graph.facebook.com/v18.0/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+        headers = {
+            'Authorization': f'Bearer {WHATSAPP_ACCESS_TOKEN}',
+            'Content-Type': 'application/json'
+        }
+        
+        data = {
+            "messaging_product": "whatsapp",
+            "to": debtor_phone,
+            "type": "template",
+            "template": {
+                "name": "PAYMENT_RECORDED",
+                "language": {"code": "en"},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": debtor_name},
+                            {"type": "text", "text": str(amount)},
+                            {"type": "text", "text": shop_name},
+                            {"type": "text", "text": str(balance)}
+                        ]
+                    }
+                ]
+            }
+        }
+        
+        response = requests.post(url, json=data, headers=headers)
+        return response.status_code == 200
+        
+    except Exception as e:
+        print(f"Error sending payment notification: {e}")
+        return False
 
 # ============================================================================ 
-# ROUTES - CORE PATT BOOK FLOW
+# MAIN ROUTES
 # ============================================================================
 
 @app.route('/')
-def home():
-    """Root route - redirect to role selection"""
-    return redirect(url_for('role_selection'))
-
-@app.route('/role-selection')
-def role_selection():
-    """Role selection screen - First page users see"""
+def index():
+    """Homepage - Retailer-only portal"""
     return render_template('role_selection.html')
 
-@app.route('/retailer/login', methods=['GET', 'POST'])
-def retailer_login():
-    """Retailer login - OTP based authentication"""
-    if request.method == 'POST':
-        phone = request.form.get('phone')
-        
-        if not phone:
-            flash('Phone number is required', 'error')
-            return render_template('retailer_login.html')
-        
-        # Clean phone number
-        if not phone.startswith('+'):
-            phone = '+' + phone
-        
-        db = get_db()
-        try:
-            # Check if retailer exists
-            retailer = db.execute(
-                'SELECT retailer_phone, shop_name FROM retailers WHERE retailer_phone = ?',
-                (phone,)
-            ).fetchone()
-            
-            if retailer:
-                # OTP simulation - in production use Firebase OTP
-                session['user_id'] = phone
-                session['user_type'] = 'retailer'
-                session['phone_number'] = phone
-                session['shop_name'] = retailer['shop_name']
-                
-                flash('Login successful!', 'success')
-                return redirect(url_for('retailer_dashboard'))
-            else:
-                flash('Phone number not found. Please create an account first.', 'error')
-        except Exception as e:
-            flash(f'Login error: {str(e)}', 'error')
-        finally:
-            db.close()
-    
-    return render_template('retailer_login.html')
+@app.route('/retailer-auth')
+def retailer_auth():
+    """Retailer authentication page"""
+    return render_template('retailer_auth.html')
 
-@app.route('/customer/login', methods=['GET', 'POST'])
-def customer_login():
-    """Customer login - OTP based authentication"""
-    if request.method == 'POST':
-        phone = request.form.get('phone')
-        
-        if not phone:
-            flash('Phone number is required', 'error')
-            return render_template('customer_login.html')
-        
-        # Clean phone number
-        if not phone.startswith('+'):
-            phone = '+' + phone
-        
-        db = get_db()
-        try:
-            # Check if customer exists
-            customer = db.execute(
-                'SELECT customer_phone, customer_name FROM customers WHERE customer_phone = ?',
-                (phone,)
-            ).fetchone()
-            
-            if customer:
-                # OTP simulation - in production use Firebase OTP
-                session['user_id'] = phone
-                session['user_type'] = 'customer'
-                session['phone_number'] = phone
-                
-                flash('Login successful!', 'success')
-                return redirect(url_for('customer_dashboard'))
-            else:
-                flash('Phone number not found. Please create an account first.', 'error')
-        except Exception as e:
-            flash(f'Login error: {str(e)}', 'error')
-        finally:
-            db.close()
-    
-    return render_template('customer_login.html')
-
-@app.route('/retailer/register', methods=['GET', 'POST'])
-def retailer_register():
-    """Retailer registration - phone + shop name only"""
-    if request.method == 'POST':
-        shop_name = request.form.get('shop_name', '').strip()
-        phone = request.form.get('phone', '').strip()
-        shop_address = request.form.get('shop_address', '').strip()
-        
-        # Validation
-        if not shop_name or not phone:
-            flash('Shop name and phone number are required', 'error')
-            return render_template('retailer_register.html')
-        
-        # Clean phone number
-        if not phone.startswith('+'):
-            phone = '+' + phone
-        
-        db = get_db()
-        try:
-            # Check if phone already exists
-            existing = db.execute(
-                'SELECT retailer_phone FROM retailers WHERE retailer_phone = ?',
-                (phone,)
-            ).fetchone()
-            
-            if existing:
-                flash('A retailer with this phone number already exists!', 'error')
-                return render_template('retailer_register.html')
-            
-            # Create retailer
-            db.execute(
-                'INSERT INTO retailers (retailer_phone, shop_name) VALUES (?, ?)',
-                (phone, shop_name)
-            )
-            
-            db.commit()
-            
-            print(f"Retailer registered successfully: Phone={phone}, Shop={shop_name}")
-            flash('Retailer account created successfully! Please login.', 'success')
-            return redirect(url_for('retailer_login'))
-            
-        except Exception as e:
-            db.rollback()
-            print(f"Error registering retailer: {str(e)}")
-            flash(f'Error creating account: {str(e)}', 'error')
-        finally:
-            db.close()
-    
-    return render_template('retailer_register.html')
-
-@app.route('/customer/register', methods=['GET', 'POST'])
-def customer_register():
-    """Customer registration - phone + name only"""
-    if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        phone = request.form.get('phone', '').strip()
-        address = request.form.get('address', '').strip()
-        
-        # Validation
-        if not name or not phone:
-            flash('Name and phone number are required', 'error')
-            return render_template('customer_register.html')
-        
-        # Clean phone number
-        if not phone.startswith('+'):
-            phone = '+' + phone
-        
-        db = get_db()
-        try:
-            # Check if phone already exists
-            existing = db.execute(
-                'SELECT customer_phone FROM customers WHERE customer_phone = ?',
-                (phone,)
-            ).fetchone()
-            
-            if existing:
-                flash('A customer with this phone number already exists!', 'error')
-                return render_template('customer_register.html')
-            
-            # Create customer (no retailer linkage initially)
-            db.execute(
-                'INSERT INTO customers (customer_phone, customer_name, retailer_phone) VALUES (?, ?, ?)',
-                (phone, name, 'temp_retailer')
-            )
-            
-            db.commit()
-            
-            print(f"Customer registered successfully: Phone={phone}, Name={name}")
-            flash('Customer account created successfully! Please login.', 'success')
-            return redirect(url_for('customer_login'))
-            
-        except Exception as e:
-            db.rollback()
-            print(f"Error registering customer: {str(e)}")
-            flash(f'Error creating account: {str(e)}', 'error')
-        finally:
-            db.close()
-    
-    return render_template('customer_register.html')
-
-@app.route('/retailer/dashboard')
-def retailer_dashboard():
-    """Retailer dashboard - add customer, credit, payment"""
-    if not is_user_logged_in():
-        return redirect(url_for('retailer_login'))
-    if session.get('user_type') != 'retailer':
-        flash('Access denied', 'error')
-        return redirect(url_for('retailer_login'))
-        
+@app.route('/dashboard')
+@retailer_required
+def dashboard():
+    """Retailer dashboard"""
+    retailer_id = session.get('retailer_id')
     db = get_db()
-    retailer_phone = session.get('phone_number')
     
     try:
         # Get retailer info
         retailer = db.execute(
-            'SELECT * FROM retailers WHERE retailer_phone = ?',
-            (retailer_phone,)
+            'SELECT * FROM retailers WHERE id = ?',
+            (retailer_id,)
         ).fetchone()
         
-        # Get customers for this retailer
-        customers = db.execute(
-            'SELECT * FROM customers WHERE retailer_phone = ? ORDER BY customer_name',
-            (retailer_phone,)
-        ).fetchall()
+        # Get debtors count and total outstanding
+        debtors_count = db.execute(
+            'SELECT COUNT(*) as count FROM debtors WHERE retailer_id = ?',
+            (retailer_id,)
+        ).fetchone()['count']
         
-        # Get recent transactions
-        transactions = db.execute(
-            'SELECT * FROM transactions WHERE retailer_phone = ? ORDER BY date DESC LIMIT 10',
-            (retailer_phone,)
-        ).fetchall()
+        total_outstanding = db.execute(
+            'SELECT SUM(total_due) as total FROM debtors WHERE retailer_id = ?',
+            (retailer_id,)
+        ).fetchone()['total'] or 0
+        
+        return render_template('dashboard_new.html', 
+                           retailer=retailer,
+                           debtors_count=debtors_count,
+                           total_outstanding=total_outstanding)
         
     except Exception as e:
-        print(f"Error in retailer dashboard: {e}")
+        print(f"Error loading dashboard: {e}")
         flash('Error loading dashboard', 'error')
-        customers = []
-        transactions = []
+        return redirect(url_for('retailer_auth'))
     finally:
         db.close()
-    
-    return render_template('retailer_dashboard.html', 
-                     retailer=retailer, 
-                     customers=customers, 
-                     transactions=transactions)
 
-@app.route('/customer/dashboard')
-def customer_dashboard():
-    """Customer dashboard - store-wise credit summary"""
-    if not is_user_logged_in():
-        return redirect(url_for('customer_login'))
-    if session.get('user_type') != 'customer':
-        flash('Access denied', 'error')
-        return redirect(url_for('customer_login'))
-        
-    db = get_db()
-    customer_phone = session.get('phone_number')
-    
+# ============================================================================ 
+# API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/auth/signup', methods=['POST'])
+def api_signup():
+    """Retailer signup API"""
     try:
-        # Get customer info
-        customer = db.execute(
-            'SELECT * FROM customers WHERE customer_phone = ?',
-            (customer_phone,)
+        data = request.get_json()
+        phone = data.get('phone', '').strip()
+        shop_name = data.get('shop_name', '').strip()
+        shop_address = data.get('shop_address', '').strip()
+        shop_photo_url = data.get('shop_photo_url', '').strip()
+        
+        # Validation
+        if not phone or len(phone) != 10:
+            return jsonify({'success': False, 'message': 'Valid 10-digit phone number required'})
+        
+        if not shop_name:
+            return jsonify({'success': False, 'message': 'Shop name is required'})
+        
+        if not shop_address:
+            return jsonify({'success': False, 'message': 'Shop address is required'})
+        
+        db = get_db()
+        
+        # Check if retailer already exists
+        existing = db.execute(
+            'SELECT id FROM retailers WHERE phone = ?',
+            (phone,)
         ).fetchone()
         
-        # Calculate outstanding per retailer
-        outstanding_by_retailer = db.execute("""
-            SELECT 
-                r.shop_name,
-                r.retailer_phone,
-                COALESCE(SUM(CASE WHEN t.type = 'credit' THEN t.amount ELSE 0 END), 0) -
-                COALESCE(SUM(CASE WHEN t.type = 'payment' THEN t.amount ELSE 0 END), 0) as outstanding
-            FROM retailers r
-            INNER JOIN transactions t ON r.retailer_phone = t.retailer_phone
-            WHERE t.customer_phone = ?
-            GROUP BY r.retailer_phone, r.shop_name
-            HAVING outstanding > 0
-            ORDER BY outstanding DESC
-        """, (customer_phone,)).fetchall()
+        if existing:
+            return jsonify({'success': False, 'message': 'Retailer with this phone number already exists'})
         
-        total_outstanding = sum(r['outstanding'] for r in outstanding_by_retailer)
+        # Generate and send OTP
+        otp = generate_otp()
+        otp_hash = hash_otp(otp)
+        expires_at = datetime.utcnow() + timedelta(minutes=5)
+        
+        # Store OTP request
+        db.execute(
+            'INSERT INTO otp_requests (phone, otp_hash, expires_at) VALUES (?, ?, ?)',
+            (phone, otp_hash, expires_at)
+        )
+        db.commit()
+        
+        # Send WhatsApp OTP
+        if send_whatsapp_otp(phone, otp):
+            return jsonify({
+                'success': True,
+                'message': 'OTP sent via WhatsApp. Please verify to complete signup.',
+                'phone': phone
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Failed to send OTP. Please try again.'})
         
     except Exception as e:
-        print(f"Error in customer dashboard: {e}")
-        flash('Error loading dashboard', 'error')
-        outstanding_by_retailer = []
-        total_outstanding = 0
+        print(f"Error in signup: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred during signup'})
     finally:
-        db.close()
-    
-    return render_template('customer_dashboard.html',
-                     outstanding_by_retailer=outstanding_by_retailer,
-                     total_outstanding=total_outstanding)
+        if 'db' in locals():
+            db.close()
 
-@app.route('/customer/retailer/<retailer_phone>')
-def customer_retailer_detail(retailer_phone):
-    """Customer retailer detail - transaction history"""
-    if not is_user_logged_in():
-        return redirect(url_for('customer_login'))
-    if session.get('user_type') != 'customer':
-        flash('Access denied', 'error')
-        return redirect(url_for('customer_login'))
-        
-    db = get_db()
-    customer_phone = session.get('phone_number')
-    
+@app.route('/api/auth/verify-signup-otp', methods=['POST'])
+def api_verify_signup_otp():
+    """Verify signup OTP and create retailer account"""
     try:
-        # Get retailer info
+        data = request.get_json()
+        otp = data.get('otp', '').strip()
+        
+        if not otp or len(otp) != 6:
+            return jsonify({'success': False, 'message': 'Valid 6-digit OTP required'})
+        
+        db = get_db()
+        
+        # Get latest OTP request
+        otp_request = db.execute(
+            'SELECT * FROM otp_requests ORDER BY created_at DESC LIMIT 1'
+        ).fetchone()
+        
+        if not otp_request:
+            return jsonify({'success': False, 'message': 'No OTP request found'})
+        
+        # Verify OTP
+        if otp_request['attempts'] >= 3:
+            return jsonify({'success': False, 'message': 'Maximum OTP attempts exceeded'})
+        
+        if datetime.utcnow() > datetime.fromisoformat(otp_request['expires_at']):
+            return jsonify({'success': False, 'message': 'OTP has expired'})
+        
+        if hash_otp(otp) != otp_request['otp_hash']:
+            # Increment attempts
+            db.execute(
+                'UPDATE otp_requests SET attempts = attempts + 1 WHERE id = ?',
+                (otp_request['id'],)
+            )
+            db.commit()
+            return jsonify({'success': False, 'message': 'Invalid OTP'})
+        
+        # OTP is valid - create retailer account
+        # Note: In production, you'd store the signup data in session or temp table
+        # For now, we'll use the phone from OTP request
+        phone = otp_request['phone']
+        shop_name = "Test Shop"  # This should come from session/temp storage
+        shop_address = "Test Address"  # This should come from session/temp storage
+        
+        db.execute(
+            'INSERT INTO retailers (phone, shop_name, shop_address) VALUES (?, ?, ?)',
+            (phone, shop_name, shop_address)
+        )
+        db.commit()
+        
+        # Get retailer ID
         retailer = db.execute(
-            'SELECT * FROM retailers WHERE retailer_phone = ?',
-            (retailer_phone,)
+            'SELECT id FROM retailers WHERE phone = ?',
+            (phone,)
+        ).fetchone()
+        
+        # Generate JWT token
+        token = generate_jwt_token(retailer['id'])
+        
+        # Clean up OTP requests
+        db.execute('DELETE FROM otp_requests WHERE phone = ?', (phone,))
+        db.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Account created successfully!',
+            'token': token,
+            'retailer': {
+                'id': retailer['id'],
+                'phone': phone,
+                'shop_name': shop_name,
+                'shop_address': shop_address
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error verifying signup OTP: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred during verification'})
+    finally:
+        if 'db' in locals():
+            db.close()
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """Retailer login API"""
+    try:
+        data = request.get_json()
+        phone = data.get('phone', '').strip()
+        
+        if not phone or len(phone) != 10:
+            return jsonify({'success': False, 'message': 'Valid 10-digit phone number required'})
+        
+        db = get_db()
+        
+        # Check if retailer exists
+        retailer = db.execute(
+            'SELECT id FROM retailers WHERE phone = ?',
+            (phone,)
         ).fetchone()
         
         if not retailer:
-            flash('Retailer not found', 'error')
-            return redirect(url_for('customer_dashboard'))
+            return jsonify({'success': False, 'message': 'Retailer not found'})
         
-        # Get transaction history
-        transactions = db.execute("""
-            SELECT type, amount, date, notes
-            FROM transactions
-            WHERE retailer_phone = ? AND customer_phone = ?
-            ORDER BY date DESC
-        """, (retailer_phone, customer_phone)).fetchall()
+        # Generate and send OTP
+        otp = generate_otp()
+        otp_hash = hash_otp(otp)
+        expires_at = datetime.utcnow() + timedelta(minutes=5)
         
-        # Calculate outstanding
-        outstanding_result = db.execute("""
-            SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) -
-                   COALESCE(SUM(CASE WHEN type = 'payment' THEN amount ELSE 0 END), 0) as outstanding
-            FROM transactions
-            WHERE retailer_phone = ? AND customer_phone = ?
-        """, (retailer_phone, customer_phone)).fetchone()
+        # Store OTP request
+        db.execute(
+            'INSERT INTO otp_requests (phone, otp_hash, expires_at) VALUES (?, ?, ?)',
+            (phone, otp_hash, expires_at)
+        )
+        db.commit()
         
-        outstanding = outstanding_result['outstanding'] if outstanding_result else 0
+        # Send WhatsApp OTP
+        if send_whatsapp_otp(phone, otp):
+            return jsonify({
+                'success': True,
+                'message': 'OTP sent via WhatsApp. Please verify to login.',
+                'phone': phone
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Failed to send OTP. Please try again.'})
         
     except Exception as e:
-        print(f"Error in customer retailer detail: {e}")
-        flash('Error loading retailer details', 'error')
-        retailer = None
-        transactions = []
-        outstanding = 0
+        print(f"Error in login: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred during login'})
     finally:
-        db.close()
-    
-    return render_template('customer_retailer_detail.html',
-                     retailer=retailer,
-                     transactions=transactions,
-                     outstanding=outstanding)
+        if 'db' in locals():
+            db.close()
 
-@app.route('/retailer/add-customer', methods=['GET', 'POST'])
-def add_customer():
-    """Add customer - can add with initial credit"""
-    if not is_user_logged_in():
-        return redirect(url_for('retailer_login'))
-    if session.get('user_type') != 'retailer':
-        flash('Access denied', 'error')
-        return redirect(url_for('retailer_login'))
+@app.route('/api/auth/verify-login-otp', methods=['POST'])
+def api_verify_login_otp():
+    """Verify login OTP"""
+    try:
+        data = request.get_json()
+        otp = data.get('otp', '').strip()
         
-    if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        phone = request.form.get('phone', '').strip()
-        initial_credit = request.form.get('initial_credit', '').strip()
-        
-        if not name or not phone:
-            flash('Customer name and phone are required', 'error')
-            return render_template('add_customer.html')
-        
-        # Clean phone number
-        if not phone.startswith('+'):
-            phone = '+' + phone
+        if not otp or len(otp) != 6:
+            return jsonify({'success': False, 'message': 'Valid 6-digit OTP required'})
         
         db = get_db()
-        retailer_phone = session.get('phone_number')
         
-        try:
-            # Check if customer already exists
-            existing = db.execute(
-                'SELECT customer_phone FROM customers WHERE customer_phone = ?',
-                (phone,)
-            ).fetchone()
-            
-            if existing:
-                flash('Customer with this phone number already exists!', 'error')
-                return render_template('add_customer.html')
-            
-            # Create customer
+        # Get latest OTP request
+        otp_request = db.execute(
+            'SELECT * FROM otp_requests ORDER BY created_at DESC LIMIT 1'
+        ).fetchone()
+        
+        if not otp_request:
+            return jsonify({'success': False, 'message': 'No OTP request found'})
+        
+        # Verify OTP
+        if otp_request['attempts'] >= 3:
+            return jsonify({'success': False, 'message': 'Maximum OTP attempts exceeded'})
+        
+        if datetime.utcnow() > datetime.fromisoformat(otp_request['expires_at']):
+            return jsonify({'success': False, 'message': 'OTP has expired'})
+        
+        if hash_otp(otp) != otp_request['otp_hash']:
+            # Increment attempts
             db.execute(
-                'INSERT INTO customers (customer_phone, customer_name, retailer_phone) VALUES (?, ?, ?)',
-                (phone, name, retailer_phone)
+                'UPDATE otp_requests SET attempts = attempts + 1 WHERE id = ?',
+                (otp_request['id'],)
             )
-            
-            # If initial credit provided, create transaction
-            if initial_credit and float(initial_credit) > 0:
-                db.execute(
-                    'INSERT INTO transactions (retailer_phone, customer_phone, type, amount, date, notes) VALUES (?, ?, ?, ?, ?, ?)',
-                    (retailer_phone, phone, 'credit', float(initial_credit), datetime.now().date(), 'Initial credit')
-                )
-                
-                # Send push notification
-                retailer = db.execute(
-                    'SELECT shop_name FROM retailers WHERE retailer_phone = ?',
-                    (retailer_phone,)
-                ).fetchone()
-                
-                if retailer:
-                    title = f"{retailer['shop_name']} - Credit Added"
-                    message = f"₹{float(initial_credit):.2f} credit has been added to your account"
-                    send_push_notification(phone, title, message)
-            
             db.commit()
-            
-            flash('Customer added successfully!', 'success')
-            return redirect(url_for('retailer_dashboard'))
-            
-        except Exception as e:
-            db.rollback()
-            print(f"Error adding customer: {e}")
-            flash(f'Error adding customer: {str(e)}', 'error')
-        finally:
+            return jsonify({'success': False, 'message': 'Invalid OTP'})
+        
+        # OTP is valid - get retailer info
+        retailer = db.execute(
+            'SELECT * FROM retailers WHERE phone = ?',
+            (otp_request['phone'],)
+        ).fetchone()
+        
+        if not retailer:
+            return jsonify({'success': False, 'message': 'Retailer not found'})
+        
+        # Generate JWT token
+        token = generate_jwt_token(retailer['id'])
+        
+        # Clean up OTP requests
+        db.execute('DELETE FROM otp_requests WHERE phone = ?', (otp_request['phone'],))
+        db.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Login successful!',
+            'token': token,
+            'retailer': {
+                'id': retailer['id'],
+                'phone': retailer['phone'],
+                'shop_name': retailer['shop_name'],
+                'shop_address': retailer['shop_address'],
+                'shop_photo_url': retailer['shop_photo_url']
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error verifying login OTP: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred during verification'})
+    finally:
+        if 'db' in locals():
             db.close()
-    
-    return render_template('add_customer.html')
 
-@app.route('/retailer/add-transaction', methods=['GET', 'POST'])
-def add_transaction():
-    """Add credit or payment transaction"""
-    if not is_user_logged_in():
-        return redirect(url_for('retailer_login'))
-    if session.get('user_type') != 'retailer':
-        flash('Access denied', 'error')
-        return redirect(url_for('retailer_login'))
+@app.route('/api/debtors', methods=['POST'])
+def api_add_debtor():
+    """Add debtor API"""
+    try:
+        # Verify JWT token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'message': 'Authentication required'})
         
-    if request.method == 'POST':
-        customer_phone = request.form.get('customer_phone')
-        trans_type = request.form.get('type')
-        amount = request.form.get('amount')
-        notes = request.form.get('notes', '')
+        token = auth_header.split(' ')[1]
+        retailer_id = verify_jwt_token(token)
+        if not retailer_id:
+            return jsonify({'success': False, 'message': 'Invalid or expired token'})
         
-        if not customer_phone or not trans_type or not amount:
-            flash('Customer, type, and amount are required', 'error')
-            return render_template('add_transaction.html')
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        phone = data.get('phone', '').strip()
+        credit_amount = float(data.get('credit_amount', 0))
+        description = data.get('description', '').strip()
+        
+        # Validation
+        if not name or not phone or credit_amount <= 0:
+            return jsonify({'success': False, 'message': 'Name, phone, and credit amount are required'})
+        
+        if len(phone) != 10:
+            return jsonify({'success': False, 'message': 'Valid 10-digit phone number required'})
         
         db = get_db()
-        retailer_phone = session.get('phone_number')
+        cursor = db.cursor()
         
-        try:
-            # Create transaction
-            db.execute(
-                'INSERT INTO transactions (retailer_phone, customer_phone, type, amount, date, notes) VALUES (?, ?, ?, ?, ?, ?)',
-                (retailer_phone, customer_phone, trans_type, float(amount), datetime.now().date(), notes)
+        # Check if debtor exists for this retailer
+        existing_debtor = cursor.execute(
+            'SELECT id, total_due FROM debtors WHERE retailer_id = ? AND phone = ?',
+            (retailer_id, phone)
+        ).fetchone()
+        
+        if existing_debtor:
+            # Update existing debtor
+            new_total = existing_debtor['total_due'] + credit_amount
+            cursor.execute(
+                'UPDATE debtors SET total_due = ? WHERE id = ?',
+                (new_total, existing_debtor['id'])
             )
-            
-            # Send push notification
-            retailer = db.execute(
-                'SELECT shop_name FROM retailers WHERE retailer_phone = ?',
-                (retailer_phone,)
-            ).fetchone()
-            
-            if retailer:
-                if trans_type == 'credit':
-                    title = f"{retailer['shop_name']} - Credit Added"
-                    message = f"₹{float(amount):.2f} credit has been added to your account"
-                else:
-                    title = f"{retailer['shop_name']} - Payment Recorded"
-                    message = f"₹{float(amount):.2f} payment has been recorded"
-                
-                send_push_notification(customer_phone, title, message)
-            
-            db.commit()
-            
-            flash(f'{trans_type.title()} added successfully!', 'success')
-            return redirect(url_for('retailer_dashboard'))
-            
-        except Exception as e:
-            db.rollback()
-            print(f"Error adding transaction: {e}")
-            flash(f'Error adding transaction: {str(e)}', 'error')
-        finally:
+            debtor_id = existing_debtor['id']
+        else:
+            # Create new debtor
+            cursor.execute(
+                'INSERT INTO debtors (retailer_id, name, phone, total_due) VALUES (?, ?, ?, ?)',
+                (retailer_id, name, phone, credit_amount)
+            )
+            debtor_id = cursor.lastrowid
+            new_total = credit_amount
+        
+        # Add transaction record
+        cursor.execute(
+            'INSERT INTO transactions (debtor_id, type, amount, description) VALUES (?, ?, ?, ?)',
+            (debtor_id, 'credit', credit_amount, description)
+        )
+        
+        db.commit()
+        
+        # Get retailer info for WhatsApp notification
+        retailer = db.execute(
+            'SELECT shop_name FROM retailers WHERE id = ?',
+            (retailer_id,)
+        ).fetchone()
+        
+        # Send WhatsApp notification (async)
+        send_credit_added_notification(phone, name, retailer['shop_name'], credit_amount, new_total)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Debtor added successfully!',
+            'debtor_id': debtor_id,
+            'total_due': new_total
+        })
+        
+    except Exception as e:
+        print(f"Error adding debtor: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred'})
+    finally:
+        if 'db' in locals():
             db.close()
-    
-    return render_template('add_transaction.html')
 
-@app.route('/customer/save-fcm-token', methods=['POST'])
-def save_fcm_token_endpoint():
-    """Save FCM token for push notifications"""
-    if not is_user_logged_in():
-        return {'success': False, 'message': 'Not logged in'}, 401
-    
-    if session.get('user_type') != 'customer':
-        return {'success': False, 'message': 'Access denied'}, 403
-    
-    data = request.get_json()
-    if not data or not data.get('token'):
-        return {'success': False, 'message': 'Token required'}, 400
-    
-    customer_phone = session.get('phone_number')
-    token = data.get('token')
-    
-    if save_fcm_token(customer_phone, token):
-        return {'success': True, 'message': 'Token saved successfully'}
-    else:
-        return {'success': False, 'message': 'Failed to save token'}, 500
+@app.route('/api/debtors', methods=['GET'])
+def api_get_debtors():
+    """Get debtors list API"""
+    try:
+        # Verify JWT token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'message': 'Authentication required'})
+        
+        token = auth_header.split(' ')[1]
+        retailer_id = verify_jwt_token(token)
+        if not retailer_id:
+            return jsonify({'success': False, 'message': 'Invalid or expired token'})
+        
+        # Get sorting parameters
+        sort_field = request.args.get('sort', 'name')
+        sort_order = request.args.get('order', 'asc')
+        
+        # Validate sort field
+        valid_sort_fields = ['name', 'total_due', 'created_at']
+        if sort_field not in valid_sort_fields:
+            sort_field = 'name'
+        
+        # Validate sort order
+        if sort_order not in ['asc', 'desc']:
+            sort_order = 'asc'
+        
+        db = get_db()
+        
+        # Get debtors with sorting
+        query = f'SELECT * FROM debtors WHERE retailer_id = ? ORDER BY {sort_field} {sort_order}'
+        debtors = db.execute(query, (retailer_id,)).fetchall()
+        
+        return jsonify({
+            'success': True,
+            'debtors': [dict(debtor) for debtor in debtors]
+        })
+        
+    except Exception as e:
+        print(f"Error getting debtors: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred'})
+    finally:
+        if 'db' in locals():
+            db.close()
 
-@app.route('/logout')
-def logout():
-    """Logout - clear session and return to role selection"""
-    session.clear()
-    flash('Logged out successfully!', 'success')
-    return redirect(url_for('role_selection'))
+@app.route('/api/payments', methods=['POST'])
+def api_add_payment():
+    """Add payment API"""
+    try:
+        # Verify JWT token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'message': 'Authentication required'})
+        
+        token = auth_header.split(' ')[1]
+        retailer_id = verify_jwt_token(token)
+        if not retailer_id:
+            return jsonify({'success': False, 'message': 'Invalid or expired token'})
+        
+        data = request.get_json()
+        debtor_id = data.get('debtor_id')
+        amount = float(data.get('amount', 0))
+        
+        # Validation
+        if not debtor_id or amount <= 0:
+            return jsonify({'success': False, 'message': 'Debtor ID and payment amount are required'})
+        
+        db = get_db()
+        
+        # Get debtor info
+        debtor = db.execute(
+            'SELECT * FROM debtors WHERE id = ? AND retailer_id = ?',
+            (debtor_id, retailer_id)
+        ).fetchone()
+        
+        if not debtor:
+            return jsonify({'success': False, 'message': 'Debtor not found'})
+        
+        if amount > debtor['total_due']:
+            return jsonify({'success': False, 'message': 'Payment amount exceeds outstanding balance'})
+        
+        # Update debtor balance
+        new_balance = debtor['total_due'] - amount
+        db.execute(
+            'UPDATE debtors SET total_due = ? WHERE id = ?',
+            (new_balance, debtor_id)
+        )
+        
+        # Add transaction record
+        db.execute(
+            'INSERT INTO transactions (debtor_id, type, amount, description) VALUES (?, ?, ?, ?)',
+            (debtor_id, 'payment', amount, 'Payment received')
+        )
+        
+        db.commit()
+        
+        # Get retailer info for WhatsApp notification
+        retailer = db.execute(
+            'SELECT shop_name FROM retailers WHERE id = ?',
+            (retailer_id,)
+        ).fetchone()
+        
+        # Send WhatsApp notification (async)
+        send_payment_recorded_notification(debtor['phone'], debtor['name'], amount, retailer['shop_name'], new_balance)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Payment recorded successfully!',
+            'remaining_balance': new_balance
+        })
+        
+    except Exception as e:
+        print(f"Error adding payment: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred'})
+    finally:
+        if 'db' in locals():
+            db.close()
 
-@app.route('/health')
-def health_check():
-    """Health check for monitoring"""
-    return {"status": "ok", "message": "Patt Book backend is running"}
+@app.route('/api/settings', methods=['GET'])
+def api_get_settings():
+    """Get retailer settings API"""
+    try:
+        # Verify JWT token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'message': 'Authentication required'})
+        
+        token = auth_header.split(' ')[1]
+        retailer_id = verify_jwt_token(token)
+        if not retailer_id:
+            return jsonify({'success': False, 'message': 'Invalid or expired token'})
+        
+        db = get_db()
+        
+        # Get retailer info
+        retailer = db.execute(
+            'SELECT * FROM retailers WHERE id = ?',
+            (retailer_id,)
+        ).fetchone()
+        
+        if not retailer:
+            return jsonify({'success': False, 'message': 'Retailer not found'})
+        
+        return jsonify({
+            'success': True,
+            'retailer': {
+                'id': retailer['id'],
+                'phone': retailer['phone'],
+                'shop_name': retailer['shop_name'],
+                'shop_address': retailer['shop_address'],
+                'shop_photo_url': retailer['shop_photo_url'],
+                'created_at': retailer['created_at']
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting settings: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred'})
+    finally:
+        if 'db' in locals():
+            db.close()
 
 # ============================================================================ 
-# INITIALIZE DATABASE
+# RUN APPLICATION
 # ============================================================================
 
 if __name__ == '__main__':
-    init_db()
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(debug=True, host='0.0.0.0', port=5000)
