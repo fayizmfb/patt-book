@@ -1,11 +1,12 @@
 """
 Patt Book Database Schema
-Phone-number based authentication and ledger system
+Email OTP Authentication with Phone as Unique Identifier
 """
 
 import sqlite3
 import os
 from datetime import datetime
+import hashlib
 
 DATABASE_PATH = 'retail_app.db'
 
@@ -16,29 +17,35 @@ def get_db():
     return db
 
 def init_db():
-    """Initialize database with correct schema"""
+    """Initialize database with Email OTP schema"""
     db = get_db()
     
     # Drop existing tables if they exist
-    db.execute('DROP TABLE IF EXISTS transactions')
+    db.execute('DROP TABLE IF EXISTS email_otps')
     db.execute('DROP TABLE IF EXISTS customers')
     db.execute('DROP TABLE IF EXISTS retailers')
+    db.execute('DROP TABLE IF EXISTS transactions')
     db.execute('DROP TABLE IF EXISTS fcm_tokens')
     
     # Create retailers table
     db.execute('''
         CREATE TABLE retailers (
             retailer_phone TEXT PRIMARY KEY,
-            shop_name TEXT NOT NULL
+            shop_name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            email_verified BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
     # Create customers table
     db.execute('''
         CREATE TABLE customers (
-            retailer_phone TEXT NOT NULL,
-            customer_phone TEXT NOT NULL,
-            customer_name TEXT NOT NULL
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            email_verified BOOLEAN DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -50,7 +57,8 @@ def init_db():
             customer_phone TEXT NOT NULL,
             type TEXT CHECK(type IN ('credit','payment')) NOT NULL,
             amount REAL NOT NULL,
-            date TEXT NOT NULL
+            date TEXT NOT NULL,
+            notes TEXT
         )
     ''')
     
@@ -64,9 +72,26 @@ def init_db():
         )
     ''')
     
+    # Create email OTPs table
+    db.execute('''
+        CREATE TABLE email_otps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            otp_hash TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(email)
+        )
+    ''')
+    
     db.commit()
     db.close()
-    print("Database initialized with correct phone-number schema")
+    print("Database initialized with Email OTP schema")
+
+def hash_otp(otp):
+    """Hash OTP for secure storage"""
+    return hashlib.sha256(otp.encode()).hexdigest()
 
 if __name__ == '__main__':
     init_db()

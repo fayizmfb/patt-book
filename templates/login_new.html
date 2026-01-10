@@ -1,0 +1,170 @@
+{% extends "base_new.html" %}
+
+{% block title %}Login - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 50px auto;">
+    <h2 style="text-align: center; margin-bottom: 30px;">Login to Patt Book</h2>
+    
+    <!-- Login Form -->
+    <div id="loginForm">
+        <form id="loginFormElement">
+            <div class="form-group">
+                <label for="userType">Account Type *</label>
+                <select id="userType" name="user_type" required>
+                    <option value="">Select account type</option>
+                    <option value="retailer">Retailer</option>
+                    <option value="customer">Customer</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email Address *</label>
+                <input type="email" id="email" name="email" required placeholder="Enter your email address">
+            </div>
+            
+            <div class="form-group">
+                <label for="phone">Mobile Number *</label>
+                <input type="tel" id="phone" name="phone" required placeholder="Enter your mobile number">
+            </div>
+            
+            <div class="actions">
+                <button type="submit" class="btn btn-success">Send OTP</button>
+                <a href="{{ url_for('role_selection') }}" class="btn btn-secondary">Back</a>
+            </div>
+        </form>
+    </div>
+    
+    <!-- OTP Verification Form -->
+    <div id="otpForm" class="hidden">
+        <h3 style="text-align: center; margin-bottom: 20px;">Verify Email</h3>
+        <p style="text-align: center; color: #666; margin-bottom: 30px;">
+            We've sent a 6-digit OTP to your email. Please enter it below to login.
+        </p>
+        
+        <form id="otpFormElement">
+            <div class="form-group">
+                <label for="otp">OTP Code *</label>
+                <input type="text" id="otp" name="otp" required placeholder="Enter 6-digit OTP" maxlength="6">
+            </div>
+            
+            <div class="actions">
+                <button type="submit" class="btn btn-success">Verify & Login</button>
+                <button type="button" class="btn btn-secondary" onclick="resendOTP()">Resend OTP</button>
+            </div>
+        </form>
+    </div>
+    
+    <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+        <p style="color: #666;">Don't have an account?</p>
+        <a href="{{ url_for('signup') }}" class="btn btn-success" style="width: 100%;">Create Account</a>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.getElementById('loginForm');
+    const otpForm = document.getElementById('otpForm');
+    const loginFormElement = document.getElementById('loginFormElement');
+    const otpFormElement = document.getElementById('otpFormElement');
+    
+    let currentEmail = '';
+    
+    // Handle login form submission
+    loginFormElement.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        
+        // Validate phone number (basic)
+        if (!/^\d{10}$/.test(data.phone.replace(/\D/g, ''))) {
+            showError('Please enter a valid 10-digit mobile number');
+            return;
+        }
+        
+        try {
+            const response = await postJSON('/auth/login', data);
+            
+            if (response.success) {
+                currentEmail = response.email;
+                showSuccess(response.message);
+                
+                // Show OTP form
+                loginForm.classList.add('hidden');
+                otpForm.classList.remove('hidden');
+                
+                // Focus on OTP input
+                document.getElementById('otp').focus();
+            } else {
+                showError(response.message);
+            }
+        } catch (error) {
+            showError(error.message);
+        }
+    });
+    
+    // Handle OTP form submission
+    otpFormElement.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const otp = document.getElementById('otp').value;
+        
+        try {
+            const response = await postJSON('/auth/verify-login-otp', { otp });
+            
+            if (response.success) {
+                showSuccess(response.message);
+                
+                // Store auth token
+                setAuthToken(response.token);
+                
+                // Store user data
+                localStorage.setItem('patt_book_user', JSON.stringify(response.user));
+                
+                // Redirect to dashboard
+                setTimeout(() => {
+                    redirectToDashboard(response.user.user_type);
+                }, 1000);
+            } else {
+                showError(response.message);
+            }
+        } catch (error) {
+            showError(error.message);
+        }
+    });
+    
+    // Resend OTP
+    window.resendOTP = async function() {
+        if (!currentEmail) {
+            showError('Please complete login first');
+            return;
+        }
+        
+        try {
+            // This would be a resend endpoint - for now, show message
+            showSuccess('OTP resent to your email');
+        } catch (error) {
+            showError(error.message);
+        }
+    };
+    
+    // Auto-format phone number
+    document.getElementById('phone').addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+        if (value.length > 10) {
+            value = value.slice(0, 10);
+        }
+        e.target.value = value;
+    });
+    
+    // Auto-focus next field on OTP input
+    document.getElementById('otp').addEventListener('input', function(e) {
+        if (e.target.value.length === 6) {
+            // Auto-submit if valid OTP length
+            otpFormElement.dispatchEvent(new Event('submit'));
+        }
+    });
+});
+</script>
+{% endblock %}

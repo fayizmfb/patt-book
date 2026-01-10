@@ -1,0 +1,53 @@
+{% extends "base_new.html" %}
+
+{% block title %}Choose Your Role - Patt Book{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px; margin: 80px auto; text-align: center;">
+    <h2 style="margin-bottom: 40px;">Welcome to Patt Book</h2>
+    <p style="color: #666; margin-bottom: 40px;">Choose your account type to continue</p>
+    
+    <div style="display: flex; gap: 30px; justify-content: center;">
+        <div style="flex: 1; max-width: 250px;">
+            <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 3em; margin-bottom: 20px;">🏪</div>
+                <h3 style="margin-bottom: 15px;">Retailer</h3>
+                <p style="color: #666; margin-bottom: 20px;">Manage customer credit accounts</p>
+                <a href="{{ url_for('signup') }}?type=retailer" class="btn btn-success" style="width: 100%;">Create Retailer Account</a>
+                <a href="{{ url_for('login') }}?type=retailer" class="btn btn-secondary" style="width: 100%; margin-top: 10px;">Login as Retailer</a>
+            </div>
+        </div>
+        
+        <div style="flex: 1; max-width: 250px;">
+            <div style="background: #f8f9fa; padding: 30px; border-radius: 8px; text-align: center;">
+                <div style="font-size: 3em; margin-bottom: 20px;">👤</div>
+                <h3 style="margin-bottom: 15px;">Customer</h3>
+                <p style="color: #666; margin-bottom: 20px;">View your credit balances</p>
+                <a href="{{ url_for('signup') }}?type=customer" class="btn btn-success" style="width: 100%;">Create Customer Account</a>
+                <a href="{{ url_for('login') }}?type=customer" class="btn btn-secondary" style="width: 100%; margin-top: 10px;">Login as Customer</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if user is already logged in
+    if (isAuthenticated()) {
+        const userData = JSON.parse(localStorage.getItem('patt_book_user') || '{}');
+        if (userData.user_type) {
+            redirectToDashboard(userData.user_type);
+        }
+    }
+    
+    // Handle URL parameters for pre-selecting user type
+    const urlParams = new URLSearchParams(window.location.search);
+    const userType = urlParams.get('type');
+    
+    if (userType) {
+        // Store user type in session for signup/login pages
+        sessionStorage.setItem('preferred_user_type', userType);
+    }
+});
+</script>
+{% endblock %}
