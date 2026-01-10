@@ -383,21 +383,21 @@
             <div class="dashboard-box" onclick="openAddDebtorModal()">
                 <div class="icon">➕</div>
                 <h2>Add Debtor</h2>
-                <p>Add new customer or update existing</p>
+                <p>Add new debtor or update existing</p>
             </div>
 
             <!-- Add Payment -->
             <div class="dashboard-box" onclick="openAddPaymentModal()">
                 <div class="icon">💰</div>
                 <h2>Add Payment</h2>
-                <p>Record customer payments</p>
+                <p>Record debtor payments</p>
             </div>
 
             <!-- Debtors List -->
             <div class="dashboard-box" onclick="openDebtorsListModal()">
                 <div class="icon">📋</div>
                 <h2>Debtors List</h2>
-                <p>View all customers and balances</p>
+                <p>View all debtors and balances</p>
             </div>
 
             <!-- Settings -->
@@ -415,7 +415,7 @@
             <div class="modal-header">
                 <span class="close" onclick="closeModal('addDebtorModal')">&times;</span>
                 <h2>Add Debtor</h2>
-                <p>Add new customer or update existing</p>
+                <p>Add new debtor or update existing</p>
             </div>
             <div class="modal-body">
                 <div id="addDebtorMessage"></div>
@@ -430,12 +430,12 @@
                 
                 <div id="manualEntry">
                     <div class="form-group">
-                        <label for="debtorName">Customer Name *</label>
-                        <input type="text" id="debtorName" placeholder="Enter customer name">
+                        <label for="debtorName">Debtor Name *</label>
+                        <input type="text" id="debtorName" placeholder="Enter debtor name">
                     </div>
                     
                     <div class="form-group">
-                        <label for="debtorPhone">Customer Mobile Number *</label>
+                        <label for="debtorPhone">Debtor Mobile Number *</label>
                         <input type="tel" id="debtorPhone" placeholder="Enter mobile number" maxlength="10">
                     </div>
                     
@@ -469,7 +469,7 @@
             <div class="modal-header">
                 <span class="close" onclick="closeModal('addPaymentModal')">&times;</span>
                 <h2>Add Payment</h2>
-                <p>Record customer payment</p>
+                <p>Record debtor payment</p>
             </div>
             <div class="modal-body">
                 <div id="addPaymentMessage"></div>
@@ -497,7 +497,7 @@
             <div class="modal-header">
                 <span class="close" onclick="closeModal('debtorsListModal')">&times;</span>
                 <h2>Debtors List</h2>
-                <p>View all customers and balances</p>
+                <p>View all debtors and balances</p>
             </div>
             <div class="modal-body">
                 <div id="debtorsListMessage"></div>
