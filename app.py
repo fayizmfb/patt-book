@@ -214,8 +214,8 @@ def send_payment_recorded_notification(debtor_phone, debtor_name, amount, shop_n
 
 @app.route('/')
 def index():
-    """Homepage - Retailer-only portal"""
-    return render_template('role_selection.html')
+    """Direct redirect to retailer login"""
+    return redirect(url_for('retailer_auth'))
 
 @app.route('/retailer-auth')
 def retailer_auth():
