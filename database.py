@@ -27,6 +27,7 @@ def init_db():
     db.execute('DROP TABLE IF EXISTS retailers')
     db.execute('DROP TABLE IF EXISTS sessions')
     db.execute('DROP TABLE IF EXISTS otp_rate_limits')
+    db.execute('DROP TABLE IF EXISTS audit_logs')
     
     # Create retailers table
     db.execute('''
@@ -104,6 +105,21 @@ def init_db():
             is_blocked BOOLEAN DEFAULT 0,
             block_until TIMESTAMP,
             UNIQUE(phone, window_start)
+        )
+    ''')
+    
+    # Create audit logs table
+    db.execute('''
+        CREATE TABLE audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            retailer_id INTEGER NOT NULL,
+            user_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            details TEXT,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (retailer_id) REFERENCES retailers (id)
         )
     ''')
     
@@ -219,12 +235,26 @@ def create_retailer_session(retailer_id, device_id, token):
             (retailer_id,)
         )
         
-        # Create new session
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
-        db.execute(
-            'INSERT INTO sessions (retailer_id, device_id, token_hash) VALUES (?, ?, ?)',
-            (retailer_id, device_id, token_hash)
-        )
+        # Check if session already exists
+        existing = db.execute(
+            'SELECT id FROM sessions WHERE retailer_id = ? AND device_id = ?',
+            (retailer_id, device_id)
+        ).fetchone()
+        
+        if existing:
+            # Update existing session
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            db.execute(
+                'UPDATE sessions SET token_hash = ?, created_at = ?, last_active = ?, is_active = 1 WHERE id = ?',
+                (token_hash, datetime.now(), datetime.now(), existing['id'])
+            )
+        else:
+            # Create new session
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            db.execute(
+                'INSERT INTO sessions (retailer_id, device_id, token_hash) VALUES (?, ?, ?)',
+                (retailer_id, device_id, token_hash)
+            )
         
         db.commit()
         return True
@@ -259,6 +289,22 @@ def validate_session(retailer_id, token, device_id):
         
     except Exception as e:
         print(f"Error validating session: {e}")
+        return False
+    finally:
+        db.close()
+
+def log_audit_action(retailer_id, user_id, action, details=None, ip_address=None, user_agent=None):
+    """Log audit action for compliance"""
+    db = get_db()
+    try:
+        db.execute(
+            'INSERT INTO audit_logs (retailer_id, user_id, action, details, ip_address, user_agent) VALUES (?, ?, ?, ?, ?, ?)',
+            (retailer_id, user_id, action, details, ip_address, user_agent)
+        )
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Error logging audit action: {e}")
         return False
     finally:
         db.close()

@@ -5,7 +5,7 @@ WhatsApp OTP Authentication + Automatic Customer Notifications
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, jsonify
 from datetime import datetime, timedelta
-from database import init_db, get_db, check_otp_rate_limit, record_otp_attempt, create_retailer_session, validate_session
+from database import init_db, get_db, check_otp_rate_limit, record_otp_attempt, create_retailer_session, validate_session, log_audit_action
 import sqlite3
 import os
 import requests
@@ -34,6 +34,7 @@ init_db()
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')
 WHATSAPP_ACCESS_TOKEN = os.environ.get('WHATSAPP_ACCESS_TOKEN', '')
 TEST_MODE = os.environ.get('TEST_MODE', 'true').lower() == 'true'
+TEST_OTP = os.environ.get('TEST_OTP', '123456')  # Temporary OTP for testing
 
 # ============================================================================ 
 # AUTHENTICATION HELPERS
@@ -98,7 +99,9 @@ def verify_jwt_token(token):
 # ============================================================================
 
 def generate_otp():
-    """Generate 6-digit OTP"""
+    """Generate 6-digit OTP or use test OTP in test mode"""
+    if TEST_MODE and TEST_OTP:
+        return TEST_OTP
     import random
     return str(random.randint(100000, 999999))
 
@@ -108,6 +111,10 @@ def hash_otp(otp):
 
 def send_whatsapp_otp(phone_number, otp):
     """Send OTP via WhatsApp Cloud API"""
+    if TEST_MODE and TEST_OTP and otp == TEST_OTP:
+        print(f"TEST MODE - Using test OTP {otp} for {phone_number}")
+        return True
+    
     if TEST_MODE:
         print(f"TEST MODE - WhatsApp OTP would be sent to {phone_number}: {otp}")
         return True
@@ -243,6 +250,46 @@ def index():
 def retailer_auth():
     """Retailer authentication page"""
     return render_template('retailer_auth.html')
+
+@app.route('/api/auth/logout', methods=['POST'])
+@retailer_required
+def api_logout():
+    """Logout retailer and invalidate session"""
+    try:
+        retailer_id = request.retailer_id
+        device_id = request.device_id
+        
+        # Invalidate session in database
+        db = get_db()
+        cursor = db.cursor()
+        
+        cursor.execute(
+            'UPDATE sessions SET is_active = 0 WHERE retailer_id = ? AND device_id = ?',
+            (retailer_id, device_id)
+        )
+        db.commit()
+        
+        # Log audit action
+        log_audit_action(
+            retailer_id=retailer_id,
+            user_id=request.retailer_id,  # Using retailer_id as user identifier
+            action='LOGOUT',
+            details=f'Device: {device_id} logged out',
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Logged out successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error during logout: {e}")
+        return jsonify({'success': False, 'message': 'An error occurred during logout'})
+    finally:
+        if 'db' in locals():
+            db.close()
 
 @app.route('/dashboard')
 @retailer_required
@@ -568,6 +615,16 @@ def api_verify_login_otp():
         if not create_retailer_session(retailer['id'], device_id, token):
             return jsonify({'success': False, 'message': 'Failed to create session'})
         
+        # Log audit action
+        log_audit_action(
+            retailer_id=retailer['id'],
+            user_id=retailer['phone'],
+            action='RETAILER_LOGIN',
+            details=f'Device: {device_id}',
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
+        
         # Clean up OTP requests
         db.execute('DELETE FROM otp_requests WHERE phone = ?', (otp_request['phone'],))
         db.commit()
@@ -664,6 +721,16 @@ def api_add_debtor():
         
         # Send WhatsApp notification (async)
         send_credit_added_notification(phone, name, retailer['shop_name'], credit_amount, new_total)
+        
+        # Log audit action
+        log_audit_action(
+            retailer_id=retailer_id,
+            user_id=phone,
+            action='CREDIT_ADDED',
+            details=f'Debtor: {name}, Amount: {credit_amount}, New Total: {new_total}',
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
         
         return jsonify({
             'success': True,
@@ -785,6 +852,16 @@ def api_add_payment():
         
         # Send WhatsApp notification (async)
         send_payment_recorded_notification(debtor['phone'], debtor['name'], amount, retailer['shop_name'], new_balance)
+        
+        # Log audit action
+        log_audit_action(
+            retailer_id=retailer_id,
+            user_id=debtor['phone'],
+            action='PAYMENT_RECORDED',
+            details=f'Debtor: {debtor["name"]}, Amount: {amount}, New Balance: {new_balance}',
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
         
         return jsonify({
             'success': True,
