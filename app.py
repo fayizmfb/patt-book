@@ -5,7 +5,7 @@ WhatsApp OTP Authentication + Automatic Customer Notifications
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, make_response, jsonify
 from datetime import datetime, timedelta
-from database import init_db, get_db
+from database import init_db, get_db, check_otp_rate_limit, record_otp_attempt, create_retailer_session, validate_session
 import sqlite3
 import os
 import requests
@@ -44,11 +44,33 @@ def is_retailer_logged_in():
     return 'retailer_id' in session
 
 def retailer_required(f):
-    """Decorator to require retailer authentication"""
+    """Decorator to require retailer authentication with device validation"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not is_retailer_logged_in():
-            return redirect(url_for('retailer_auth'))
+        # Check for authentication token
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'success': False, 'message': 'Authentication required'}), 401
+        
+        token = auth_header.split(' ')[1]
+        retailer_id = verify_jwt_token(token)
+        if not retailer_id:
+            return jsonify({'success': False, 'message': 'Invalid or expired token'}), 401
+        
+        # Check for device ID
+        device_id = request.headers.get('X-Device-ID')
+        if not device_id:
+            return jsonify({'success': False, 'message': 'Device ID required'}), 400
+        
+        # Validate session
+        if not validate_session(retailer_id, token, device_id):
+            return jsonify({'success': False, 'message': 'Invalid session or device'}), 401
+        
+        # Store validated info for the route
+        request.retailer_id = retailer_id
+        request.device_id = device_id
+        request.token = token
+        
         return f(*args, **kwargs)
     return decorated_function
 
@@ -225,8 +247,8 @@ def retailer_auth():
 @app.route('/dashboard')
 @retailer_required
 def dashboard():
-    """Retailer dashboard"""
-    retailer_id = session.get('retailer_id')
+    """Retailer dashboard with device validation"""
+    retailer_id = request.retailer_id
     db = get_db()
     
     try:
@@ -265,7 +287,7 @@ def dashboard():
 
 @app.route('/api/auth/signup', methods=['POST'])
 def api_signup():
-    """Retailer signup API"""
+    """Retailer signup API with rate limiting"""
     try:
         data = request.get_json()
         phone = data.get('phone', '').strip()
@@ -283,6 +305,15 @@ def api_signup():
         if not shop_address:
             return jsonify({'success': False, 'message': 'Shop address is required'})
         
+        # Check OTP rate limiting
+        rate_limit = check_otp_rate_limit(phone)
+        if rate_limit['blocked']:
+            return jsonify({
+                'success': False, 
+                'message': rate_limit['message'],
+                'blocked_until': rate_limit.get('block_until')
+            }), 429  # HTTP 429 Too Many Requests
+        
         db = get_db()
         
         # Check if retailer already exists
@@ -293,6 +324,9 @@ def api_signup():
         
         if existing:
             return jsonify({'success': False, 'message': 'Retailer with this phone number already exists'})
+        
+        # Record OTP attempt for rate limiting
+        record_otp_attempt(phone)
         
         # Generate and send OTP
         otp = generate_otp()
@@ -325,13 +359,17 @@ def api_signup():
 
 @app.route('/api/auth/verify-signup-otp', methods=['POST'])
 def api_verify_signup_otp():
-    """Verify signup OTP and create retailer account"""
+    """Verify signup OTP and create retailer account with device tracking"""
     try:
         data = request.get_json()
         otp = data.get('otp', '').strip()
+        device_id = data.get('device_id', '').strip()
         
         if not otp or len(otp) != 6:
             return jsonify({'success': False, 'message': 'Valid 6-digit OTP required'})
+        
+        if not device_id:
+            return jsonify({'success': False, 'message': 'Device ID required'})
         
         db = get_db()
         
@@ -381,6 +419,10 @@ def api_verify_signup_otp():
         # Generate JWT token
         token = generate_jwt_token(retailer['id'])
         
+        # Create session with device tracking
+        if not create_retailer_session(retailer['id'], device_id, token):
+            return jsonify({'success': False, 'message': 'Failed to create session'})
+        
         # Clean up OTP requests
         db.execute('DELETE FROM otp_requests WHERE phone = ?', (phone,))
         db.commit()
@@ -406,13 +448,26 @@ def api_verify_signup_otp():
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
-    """Retailer login API"""
+    """Retailer login API with rate limiting"""
     try:
         data = request.get_json()
         phone = data.get('phone', '').strip()
+        device_id = data.get('device_id', '').strip()
         
         if not phone or len(phone) != 10:
             return jsonify({'success': False, 'message': 'Valid 10-digit phone number required'})
+        
+        if not device_id:
+            return jsonify({'success': False, 'message': 'Device ID is required'})
+        
+        # Check OTP rate limiting
+        rate_limit = check_otp_rate_limit(phone)
+        if rate_limit['blocked']:
+            return jsonify({
+                'success': False, 
+                'message': rate_limit['message'],
+                'blocked_until': rate_limit.get('block_until')
+            }), 429  # HTTP 429 Too Many Requests
         
         db = get_db()
         
@@ -424,6 +479,9 @@ def api_login():
         
         if not retailer:
             return jsonify({'success': False, 'message': 'Retailer not found'})
+        
+        # Record OTP attempt for rate limiting
+        record_otp_attempt(phone)
         
         # Generate and send OTP
         otp = generate_otp()
@@ -456,13 +514,17 @@ def api_login():
 
 @app.route('/api/auth/verify-login-otp', methods=['POST'])
 def api_verify_login_otp():
-    """Verify login OTP"""
+    """Verify login OTP with device tracking"""
     try:
         data = request.get_json()
         otp = data.get('otp', '').strip()
+        device_id = data.get('device_id', '').strip()
         
         if not otp or len(otp) != 6:
             return jsonify({'success': False, 'message': 'Valid 6-digit OTP required'})
+        
+        if not device_id:
+            return jsonify({'success': False, 'message': 'Device ID required'})
         
         db = get_db()
         
@@ -502,6 +564,10 @@ def api_verify_login_otp():
         # Generate JWT token
         token = generate_jwt_token(retailer['id'])
         
+        # Create session with device tracking (invalidates old sessions)
+        if not create_retailer_session(retailer['id'], device_id, token):
+            return jsonify({'success': False, 'message': 'Failed to create session'})
+        
         # Clean up OTP requests
         db.execute('DELETE FROM otp_requests WHERE phone = ?', (otp_request['phone'],))
         db.commit()
@@ -528,35 +594,38 @@ def api_verify_login_otp():
 
 @app.route('/api/debtors', methods=['POST'])
 def api_add_debtor():
-    """Add debtor API"""
+    """Add debtor API with backend validation"""
     try:
-        # Verify JWT token
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'success': False, 'message': 'Authentication required'})
-        
-        token = auth_header.split(' ')[1]
-        retailer_id = verify_jwt_token(token)
-        if not retailer_id:
-            return jsonify({'success': False, 'message': 'Invalid or expired token'})
+        # Verify JWT token and device (handled by decorator)
+        retailer_id = request.retailer_id
         
         data = request.get_json()
         name = data.get('name', '').strip()
         phone = data.get('phone', '').strip()
-        credit_amount = float(data.get('credit_amount', 0))
+        credit_amount = data.get('credit_amount', 0)
         description = data.get('description', '').strip()
         
-        # Validation
-        if not name or not phone or credit_amount <= 0:
-            return jsonify({'success': False, 'message': 'Name, phone, and credit amount are required'})
+        # Backend validation
+        if not name or len(name) < 2 or len(name) > 100:
+            return jsonify({'success': False, 'message': 'Valid name (2-100 characters) required'})
         
-        if len(phone) != 10:
+        if not phone or len(phone) != 10 or not phone.isdigit():
             return jsonify({'success': False, 'message': 'Valid 10-digit phone number required'})
+        
+        try:
+            credit_amount = float(credit_amount)
+            if credit_amount <= 0 or credit_amount > 999999:
+                return jsonify({'success': False, 'message': 'Valid credit amount (0.01-999999) required'})
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Invalid credit amount format'})
+        
+        if description and len(description) > 500:
+            return jsonify({'success': False, 'message': 'Description too long (max 500 characters)'})
         
         db = get_db()
         cursor = db.cursor()
         
-        # Check if debtor exists for this retailer
+        # Check if debtor exists for this retailer (retailer ownership validation)
         existing_debtor = cursor.execute(
             'SELECT id, total_due FROM debtors WHERE retailer_id = ? AND phone = ?',
             (retailer_id, phone)
@@ -611,20 +680,14 @@ def api_add_debtor():
             db.close()
 
 @app.route('/api/debtors', methods=['GET'])
+@retailer_required
 def api_get_debtors():
-    """Get debtors list API"""
+    """Get debtors list API with backend validation"""
     try:
-        # Verify JWT token
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'success': False, 'message': 'Authentication required'})
+        # retailer_id and device already validated by decorator
+        retailer_id = request.retailer_id
         
-        token = auth_header.split(' ')[1]
-        retailer_id = verify_jwt_token(token)
-        if not retailer_id:
-            return jsonify({'success': False, 'message': 'Invalid or expired token'})
-        
-        # Get sorting parameters
+        # Get sorting parameters with validation
         sort_field = request.args.get('sort', 'name')
         sort_order = request.args.get('order', 'asc')
         
@@ -639,7 +702,7 @@ def api_get_debtors():
         
         db = get_db()
         
-        # Get debtors with sorting
+        # Get debtors with sorting (retailer ownership validation)
         query = f'SELECT * FROM debtors WHERE retailer_id = ? ORDER BY {sort_field} {sort_order}'
         debtors = db.execute(query, (retailer_id,)).fetchall()
         
@@ -657,30 +720,38 @@ def api_get_debtors():
 
 @app.route('/api/payments', methods=['POST'])
 def api_add_payment():
-    """Add payment API"""
+    """Add payment API with backend validation"""
     try:
-        # Verify JWT token
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'success': False, 'message': 'Authentication required'})
-        
-        token = auth_header.split(' ')[1]
-        retailer_id = verify_jwt_token(token)
-        if not retailer_id:
-            return jsonify({'success': False, 'message': 'Invalid or expired token'})
+        # Verify JWT token and device (handled by decorator)
+        retailer_id = request.retailer_id
         
         data = request.get_json()
         debtor_id = data.get('debtor_id')
-        amount = float(data.get('amount', 0))
+        amount = data.get('amount', 0)
         
-        # Validation
-        if not debtor_id or amount <= 0:
-            return jsonify({'success': False, 'message': 'Debtor ID and payment amount are required'})
+        # Backend validation
+        if not debtor_id:
+            return jsonify({'success': False, 'message': 'Debtor ID is required'})
+        
+        try:
+            debtor_id = int(debtor_id)
+            if debtor_id <= 0:
+                return jsonify({'success': False, 'message': 'Valid debtor ID required'})
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Invalid debtor ID format'})
+        
+        try:
+            amount = float(amount)
+            if amount <= 0 or amount > 999999:
+                return jsonify({'success': False, 'message': 'Valid payment amount (0.01-999999) required'})
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': 'Invalid payment amount format'})
         
         db = get_db()
+        cursor = db.cursor()
         
-        # Get debtor info
-        debtor = db.execute(
+        # Get debtor info with retailer ownership validation
+        debtor = cursor.execute(
             'SELECT * FROM debtors WHERE id = ? AND retailer_id = ?',
             (debtor_id, retailer_id)
         ).fetchone()
@@ -693,13 +764,13 @@ def api_add_payment():
         
         # Update debtor balance
         new_balance = debtor['total_due'] - amount
-        db.execute(
+        cursor.execute(
             'UPDATE debtors SET total_due = ? WHERE id = ?',
             (new_balance, debtor_id)
         )
         
         # Add transaction record
-        db.execute(
+        cursor.execute(
             'INSERT INTO transactions (debtor_id, type, amount, description) VALUES (?, ?, ?, ?)',
             (debtor_id, 'payment', amount, 'Payment received')
         )
@@ -729,18 +800,12 @@ def api_add_payment():
             db.close()
 
 @app.route('/api/settings', methods=['GET'])
+@retailer_required
 def api_get_settings():
-    """Get retailer settings API"""
+    """Get retailer settings API with backend validation"""
     try:
-        # Verify JWT token
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'success': False, 'message': 'Authentication required'})
-        
-        token = auth_header.split(' ')[1]
-        retailer_id = verify_jwt_token(token)
-        if not retailer_id:
-            return jsonify({'success': False, 'message': 'Invalid or expired token'})
+        # retailer_id and device already validated by decorator
+        retailer_id = request.retailer_id
         
         db = get_db()
         

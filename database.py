@@ -5,7 +5,7 @@ WhatsApp OTP Authentication & Ledger System
 
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 
 DATABASE_PATH = 'retail_app.db'
@@ -25,6 +25,8 @@ def init_db():
     db.execute('DROP TABLE IF EXISTS transactions')
     db.execute('DROP TABLE IF EXISTS debtors')
     db.execute('DROP TABLE IF EXISTS retailers')
+    db.execute('DROP TABLE IF EXISTS sessions')
+    db.execute('DROP TABLE IF EXISTS otp_rate_limits')
     
     # Create retailers table
     db.execute('''
@@ -64,7 +66,7 @@ def init_db():
         )
     ''')
     
-    # Create OTP requests table
+    # Create OTP requests table with rate limiting
     db.execute('''
         CREATE TABLE otp_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +76,34 @@ def init_db():
             attempts INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(phone)
+        )
+    ''')
+    
+    # Create sessions table for device tracking
+    db.execute('''
+        CREATE TABLE sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            retailer_id INTEGER NOT NULL,
+            device_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT 1,
+            FOREIGN KEY (retailer_id) REFERENCES retailers (id),
+            UNIQUE(retailer_id, device_id)
+        )
+    ''')
+    
+    # Create rate limiting table for OTP attempts
+    db.execute('''
+        CREATE TABLE otp_rate_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone TEXT NOT NULL,
+            attempt_count INTEGER DEFAULT 1,
+            window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_blocked BOOLEAN DEFAULT 0,
+            block_until TIMESTAMP,
+            UNIQUE(phone, window_start)
         )
     ''')
     
@@ -97,8 +127,139 @@ def cleanup_expired_otps():
         db.execute('DELETE FROM otp_requests WHERE expires_at < ?', (datetime.now(),))
         db.commit()
     except Exception as e:
-        print(f"Error cleaning up expired OTPs: {e}")
         db.rollback()
+        print(f"Error cleaning expired OTPs: {e}")
+    finally:
+        db.close()
+
+def check_otp_rate_limit(phone):
+    """Check if phone is rate limited for OTP requests"""
+    db = get_db()
+    try:
+        current_time = datetime.now()
+        window_start = current_time - timedelta(minutes=10)
+        
+        # Clean old rate limit records
+        db.execute('DELETE FROM otp_rate_limits WHERE window_start < ?', (window_start,))
+        
+        # Check current window attempts
+        rate_record = db.execute(
+            'SELECT attempt_count, is_blocked, block_until FROM otp_rate_limits WHERE phone = ? AND window_start >= ?',
+            (phone, window_start)
+        ).fetchone()
+        
+        if rate_record and rate_record['is_blocked']:
+            if current_time < datetime.fromisoformat(rate_record['block_until']):
+                return {
+                    'blocked': True,
+                    'block_until': rate_record['block_until'],
+                    'message': 'Too many OTP attempts. Please try again later.'
+                }
+        
+        if rate_record and rate_record['attempt_count'] >= 3:
+            # Block for 15 minutes
+            block_until = current_time + timedelta(minutes=15)
+            db.execute(
+                'UPDATE otp_rate_limits SET is_blocked = 1, block_until = ? WHERE phone = ? AND window_start >= ?',
+                (block_until, phone, window_start)
+            )
+            db.commit()
+            return {
+                'blocked': True,
+                'block_until': block_until.isoformat(),
+                'message': 'Too many OTP attempts. Please try again in 15 minutes.'
+            }
+        
+        return {'blocked': False}
+        
+    except Exception as e:
+        print(f"Error checking OTP rate limit: {e}")
+        return {'blocked': False, 'error': str(e)}
+    finally:
+        db.close()
+
+def record_otp_attempt(phone):
+    """Record OTP attempt for rate limiting"""
+    db = get_db()
+    try:
+        current_time = datetime.now()
+        window_start = current_time - timedelta(minutes=10)
+        
+        # Update or create rate limit record
+        existing = db.execute(
+            'SELECT id FROM otp_rate_limits WHERE phone = ? AND window_start >= ?',
+            (phone, window_start)
+        ).fetchone()
+        
+        if existing:
+            db.execute(
+                'UPDATE otp_rate_limits SET attempt_count = attempt_count + 1 WHERE phone = ? AND window_start >= ?',
+                (phone, window_start)
+            )
+        else:
+            db.execute(
+                'INSERT INTO otp_rate_limits (phone, attempt_count, window_start) VALUES (?, 1, ?)',
+                (phone, current_time)
+            )
+        
+        db.commit()
+        
+    except Exception as e:
+        print(f"Error recording OTP attempt: {e}")
+    finally:
+        db.close()
+
+def create_retailer_session(retailer_id, device_id, token):
+    """Create new session and invalidate old sessions"""
+    db = get_db()
+    try:
+        # Invalidate old sessions for this retailer
+        db.execute(
+            'UPDATE sessions SET is_active = 0 WHERE retailer_id = ?',
+            (retailer_id,)
+        )
+        
+        # Create new session
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        db.execute(
+            'INSERT INTO sessions (retailer_id, device_id, token_hash) VALUES (?, ?, ?)',
+            (retailer_id, device_id, token_hash)
+        )
+        
+        db.commit()
+        return True
+        
+    except Exception as e:
+        print(f"Error creating session: {e}")
+        return False
+    finally:
+        db.close()
+
+def validate_session(retailer_id, token, device_id):
+    """Validate session and check device"""
+    db = get_db()
+    try:
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        
+        session = db.execute(
+            'SELECT * FROM sessions WHERE retailer_id = ? AND token_hash = ? AND device_id = ? AND is_active = 1',
+            (retailer_id, token_hash, device_id)
+        ).fetchone()
+        
+        if session:
+            # Update last active time
+            db.execute(
+                'UPDATE sessions SET last_active = ? WHERE id = ?',
+                (datetime.now(), session['id'])
+            )
+            db.commit()
+            return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"Error validating session: {e}")
+        return False
     finally:
         db.close()
 
