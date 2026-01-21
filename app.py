@@ -571,8 +571,7 @@ def api_login():
                 'success': True,
                 'message': 'OTP sent via WhatsApp. Please verify to login.',
                 'phone': phone,
-                'device_id': device_id  
-                'device_id': device_id  # Include device ID in response
+                'device_id': device_id
             })
         else:
             return jsonify({'success': False, 'message': 'Failed to send OTP. Please try again.'})
