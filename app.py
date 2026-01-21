@@ -30,6 +30,12 @@ app.secret_key = os.environ.get('JWT_SECRET', 'your-secret-key-change-in-product
 # Initialize retailer-only database
 init_db()
 
+# Register blueprints
+from routes.reminders import reminders_bp
+from routes.pin_auth import pin_auth_bp
+app.register_blueprint(reminders_bp)
+app.register_blueprint(pin_auth_bp)
+
 # WhatsApp Configuration
 WHATSAPP_PHONE_NUMBER_ID = os.environ.get('WHATSAPP_PHONE_NUMBER_ID', '')
 WHATSAPP_ACCESS_TOKEN = os.environ.get('WHATSAPP_ACCESS_TOKEN', '')
@@ -58,16 +64,19 @@ def retailer_required(f):
         if not retailer_id:
             return jsonify({'success': False, 'message': 'Invalid or expired token'}), 401
         
-        # Check for device ID
+        # Check for device ID - generate if not provided for testing
         device_id = request.headers.get('X-Device-ID')
         if not device_id:
-            return jsonify({'success': False, 'message': 'Device ID required'}), 400
+            # Generate a unique device ID for testing
+            import uuid
+            device_id = str(uuid.uuid4())
+            print(f"Generated device ID for testing: {device_id}")
         
         # Validate session
         if not validate_session(retailer_id, token, device_id):
             return jsonify({'success': False, 'message': 'Invalid session or device'}), 401
         
-        # Store validated info for the route
+        # Store validated info for route
         request.retailer_id = retailer_id
         request.device_id = device_id
         request.token = token
@@ -363,14 +372,14 @@ def api_signup():
         
         db = get_db()
         
-        # Check if retailer already exists
-        existing = db.execute(
-            'SELECT id FROM retailers WHERE phone = ?',
-            (phone,)
-        ).fetchone()
-        
-        if existing:
-            return jsonify({'success': False, 'message': 'Retailer with this phone number already exists'})
+        # Check if retailer already exists (skip for signup flow)
+        # existing = db.execute(
+        #     'SELECT id FROM retailers WHERE phone = ?',
+        #     (phone,)
+        # ).fetchone()
+        # 
+        # if existing:
+        #     return jsonify({'success': False, 'message': 'Retailer with this phone number already exists'})
         
         # Record OTP attempt for rate limiting
         record_otp_attempt(phone)
@@ -420,13 +429,18 @@ def api_verify_signup_otp():
         
         db = get_db()
         
-        # Get latest OTP request
+        # Get latest OTP request for this phone number
         otp_request = db.execute(
-            'SELECT * FROM otp_requests ORDER BY created_at DESC LIMIT 1'
+            'SELECT * FROM otp_requests WHERE phone = ? ORDER BY created_at DESC LIMIT 1',
+            (otp_request['phone'],)
         ).fetchone()
         
-        if not otp_request:
-            return jsonify({'success': False, 'message': 'No OTP request found'})
+        print(f"DEBUG: OTP request found: {otp_request}")
+        print(f"DEBUG: Phone from OTP request: {otp_request['phone'] if otp_request else 'None'}")
+        print(f"DEBUG: OTP from request: {otp}")
+        print(f"DEBUG: OTP hash from request: {otp_request['otp_hash'] if otp_request else 'None'}")
+        print(f"DEBUG: Attempts from request: {otp_request['attempts'] if otp_request else 'None'}")
+        print(f"DEBUG: Expires at from request: {otp_request['expires_at'] if otp_request else 'None'}")
         
         # Verify OTP
         if otp_request['attempts'] >= 3:
@@ -435,15 +449,22 @@ def api_verify_signup_otp():
         if datetime.utcnow() > datetime.fromisoformat(otp_request['expires_at']):
             return jsonify({'success': False, 'message': 'OTP has expired'})
         
-        if hash_otp(otp) != otp_request['otp_hash']:
+        input_otp_hash = hash_otp(otp)
+        print(f"DEBUG: Input OTP: {otp}")
+        print(f"DEBUG: Input OTP hash: {input_otp_hash}")
+        print(f"DEBUG: Stored OTP hash: {otp_request['otp_hash'] if otp_request else 'None'}")
+        
+        if input_otp_hash != otp_request['otp_hash']:
             # Increment attempts
             db.execute(
                 'UPDATE otp_requests SET attempts = attempts + 1 WHERE id = ?',
                 (otp_request['id'],)
             )
             db.commit()
+            print(f"DEBUG: OTP verification failed - invalid OTP")
             return jsonify({'success': False, 'message': 'Invalid OTP'})
         
+        print(f"DEBUG: OTP verification successful")
         # OTP is valid - create retailer account
         # Note: In production, you'd store the signup data in session or temp table
         # For now, we'll use the phone from OTP request
@@ -505,7 +526,9 @@ def api_login():
             return jsonify({'success': False, 'message': 'Valid 10-digit phone number required'})
         
         if not device_id:
-            return jsonify({'success': False, 'message': 'Device ID is required'})
+            import uuid
+            device_id = str(uuid.uuid4())
+            print(f"Generated device ID for testing: {device_id}")
         
         # Check OTP rate limiting
         rate_limit = check_otp_rate_limit(phone)
@@ -547,7 +570,9 @@ def api_login():
             return jsonify({
                 'success': True,
                 'message': 'OTP sent via WhatsApp. Please verify to login.',
-                'phone': phone
+                'phone': phone,
+                'device_id': device_id  
+                'device_id': device_id  # Include device ID in response
             })
         else:
             return jsonify({'success': False, 'message': 'Failed to send OTP. Please try again.'})

@@ -37,6 +37,7 @@ def init_db():
             shop_name TEXT NOT NULL,
             shop_address TEXT NOT NULL,
             shop_photo_url TEXT,
+            pin_hash TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -305,6 +306,55 @@ def log_audit_action(retailer_id, user_id, action, details=None, ip_address=None
         return True
     except Exception as e:
         print(f"Error logging audit action: {e}")
+        return False
+    finally:
+        db.close()
+
+def create_retailer_with_pin(phone, shop_name, shop_address, pin_hash):
+    """Create new retailer with PIN"""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            'INSERT INTO retailers (phone, shop_name, shop_address, pin_hash) VALUES (?, ?, ?, ?)',
+            (phone, shop_name, shop_address, pin_hash)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return None  # Phone already exists
+    except Exception as e:
+        print(f"Error creating retailer: {e}")
+        return None
+    finally:
+        db.close()
+
+def get_retailer_by_phone(phone):
+    """Get retailer by phone number"""
+    db = get_db()
+    try:
+        retailer = db.execute(
+            'SELECT * FROM retailers WHERE phone = ?',
+            (phone,)
+        ).fetchone()
+        return retailer
+    except Exception as e:
+        print(f"Error getting retailer: {e}")
+        return None
+    finally:
+        db.close()
+
+def update_retailer_pin(retailer_id, pin_hash):
+    """Update retailer PIN"""
+    db = get_db()
+    try:
+        db.execute(
+            'UPDATE retailers SET pin_hash = ? WHERE id = ?',
+            (pin_hash, retailer_id)
+        )
+        db.commit()
+        return True
+    except Exception as e:
+        print(f"Error updating PIN: {e}")
         return False
     finally:
         db.close()
