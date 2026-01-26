@@ -15,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import axios from 'axios';
 import { useNavigation } from '@react-navigation/native';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 
 const RetailerAccountCreation = ({ route }: any) => {
   const { mobileNumber, userRole } = route.params;
@@ -30,7 +31,6 @@ const RetailerAccountCreation = ({ route }: any) => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
-  const API_BASE_URL = 'http://localhost:5000/api';
 
   useEffect(() => {
     requestLocationPermission();
@@ -147,7 +147,7 @@ const RetailerAccountCreation = ({ route }: any) => {
 
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/create-account`, {
+      const response = await axios.post(buildApiUrl(API_CONFIG.ENDPOINTS.CREATE_ACCOUNT), {
         mobile_number: mobileNumber,
         user_type: userRole,
         shop_name: formData.shopName,

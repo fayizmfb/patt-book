@@ -12,6 +12,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { useNavigation } from '@react-navigation/native';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 
 const CustomerAccountCreation = ({ route }: any) => {
   const { mobileNumber, userRole } = route.params;
@@ -19,7 +20,6 @@ const CustomerAccountCreation = ({ route }: any) => {
 
   const [customerName, setCustomerName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const API_BASE_URL = 'http://localhost:5000/api';
 
   const validateForm = () => {
     if (!customerName || customerName.trim().length < 2) {
@@ -40,7 +40,7 @@ const CustomerAccountCreation = ({ route }: any) => {
 
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/create-account`, {
+      const response = await axios.post(buildApiUrl(API_CONFIG.ENDPOINTS.CREATE_ACCOUNT), {
         mobile_number: mobileNumber,
         user_type: userRole,
         customer_name: customerName.trim(),

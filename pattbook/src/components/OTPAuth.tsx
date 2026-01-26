@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import RetailerAccountCreation from './RetailerAccountCreation';
 import CustomerAccountCreation from './CustomerAccountCreation';
+import { API_CONFIG, buildApiUrl } from '../config/api';
 
 const OTPAuth = ({ route }: any) => {
   const { userRole } = route.params;
@@ -24,8 +25,6 @@ const OTPAuth = ({ route }: any) => {
   const [isNewUser, setIsNewUser] = useState(false);
   const navigation = useNavigation();
 
-  const API_BASE_URL = 'http://localhost:5000/api';
-
   const sendOTP = async () => {
     if (!mobileNumber || mobileNumber.length !== 10) {
       Alert.alert('Error', 'Please enter a valid 10-digit mobile number');
@@ -34,7 +33,7 @@ const OTPAuth = ({ route }: any) => {
 
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/send-otp`, {
+      const response = await axios.post(buildApiUrl(API_CONFIG.ENDPOINTS.SEND_OTP), {
         mobile_number: mobileNumber,
       });
 
@@ -65,7 +64,7 @@ const OTPAuth = ({ route }: any) => {
 
     setIsLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, {
+      const response = await axios.post(buildApiUrl(API_CONFIG.ENDPOINTS.VERIFY_OTP), {
         mobile_number: mobileNumber,
         otp: otp,
         user_type: userRole,
