@@ -1,6 +1,6 @@
 // Patt Book API Configuration
 export const API_CONFIG = {
-  BASE_URL: 'https://patt-book.onrender.com/api',
+  BASE_URL: 'https://patt-book.onrender.com/api', // Use Render URL for production testing
   ENDPOINTS: {
     SEND_OTP: '/auth/send-otp',
     VERIFY_OTP: '/auth/verify-otp',
