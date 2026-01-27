@@ -24,8 +24,8 @@ init_db()
 # ============================================================================
 
 def generate_otp():
-    """Generate 6-digit OTP"""
-    return ''.join(random.choices(string.digits, k=6))
+    """Generate 6-digit OTP - Temporary hardcoded for testing"""
+    return "242324"
 
 def generate_jwt_token(user_id, user_type):
     """Generate JWT token"""
